@@ -1,0 +1,126 @@
+#!/usr/bin/python3
+"""Install or verify one exact loopback pyDuckHunt scrape job."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import stat
+import tempfile
+from pathlib import Path
+
+
+MAX_CONFIG_BYTES = 4 * 1024 * 1024
+JOB = """  - job_name: pyduckhunt
+    honor_labels: false
+    scrape_interval: 15s
+    scrape_timeout: 5s
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets:
+          - 127.0.0.1:9817
+"""
+JOB_NAME = re.compile(r"^\s*-?\s*job_name\s*:\s*['\"]?pyduckhunt['\"]?\s*(?:#.*)?$")
+TOP_LEVEL_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\s*:")
+
+
+def read_config(path: Path) -> tuple[str, os.stat_result]:
+    if not path.is_absolute() or path == Path("/") or path.is_symlink():
+        raise ValueError("Prometheus config must be one absolute regular file")
+    details = path.stat()
+    if not stat.S_ISREG(details.st_mode):
+        raise ValueError("Prometheus config must be one absolute regular file")
+    if details.st_mode & 0o022 or not 0 < details.st_size <= MAX_CONFIG_BYTES:
+        raise ValueError("Prometheus config mode or size is unsafe")
+    payload = path.read_text(encoding="utf-8")
+    if "\x00" in payload or "\r" in payload:
+        raise ValueError("Prometheus config text is invalid")
+    return payload, details
+
+
+def patched_config(payload: str) -> str:
+    lines = payload.splitlines(keepends=True)
+    matching_jobs = sum(bool(JOB_NAME.match(line.rstrip("\n"))) for line in lines)
+    if matching_jobs:
+        if matching_jobs == 1 and JOB in payload:
+            return payload
+        raise ValueError("an unexpected pyduckhunt scrape job already exists")
+
+    indexes = [
+        index
+        for index, line in enumerate(lines)
+        if re.fullmatch(r"scrape_configs\s*:\s*(?:#.*)?\n?", line)
+    ]
+    if len(indexes) != 1:
+        raise ValueError("Prometheus config needs one block scrape_configs section")
+    start = indexes[0] + 1
+    end = len(lines)
+    for index in range(start, len(lines)):
+        line = lines[index]
+        if line.strip() and not line.lstrip().startswith("#") and TOP_LEVEL_KEY.match(line):
+            end = index
+            break
+    if end == start:
+        raise ValueError("Prometheus scrape_configs section is empty")
+    prefix = "" if end == 0 or lines[end - 1].endswith("\n") else "\n"
+    lines.insert(end, prefix + JOB)
+    return "".join(lines)
+
+
+def write_atomic(path: Path, payload: str, details: os.stat_result) -> None:
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.pyduckhunt.",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            os.fchmod(handle.fileno(), stat.S_IMODE(details.st_mode))
+            os.fchown(handle.fileno(), details.st_uid, details.st_gid)
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+        temporary_path = None
+        descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("action", choices=("apply", "check", "plan"))
+    parser.add_argument("config", type=Path)
+    args = parser.parse_args()
+    payload, details = read_config(args.config)
+    candidate = patched_config(payload)
+    if args.action == "check":
+        if candidate != payload or payload.count(JOB) != 1:
+            raise SystemExit("[KO] exact pyduckhunt scrape job is absent")
+        print("[OK] Prometheus scrape job is exact.")
+        return 0
+    if args.action == "plan":
+        if candidate == payload:
+            raise SystemExit("[KO] exact pyduckhunt scrape job already exists")
+        print("[OK] Prometheus configuration accepts the exact scrape job.")
+        return 0
+    if candidate == payload:
+        print("[OK] Prometheus scrape job already present.")
+        return 0
+    write_atomic(args.config, candidate, details)
+    print("[OK] Prometheus scrape job installed atomically.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

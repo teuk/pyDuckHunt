@@ -1,0 +1,14 @@
+apiVersion: 1
+
+providers:
+  - name: pyDuckHunt
+    orgId: 1
+    folder: IRC
+    folderUid: irc-services
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/pyduckhunt
+      foldersFromFilesStructure: false

@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.coverage
+.coverage.*
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+htmlcov/
+
+# Local environments
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Runtime configuration and state
+config/pyduckhunt.toml
+state/
+logs/
+backups/
+exports/
+*.db
+*.sqlite
+*.sqlite3
+
+# Private research material
+corpus/
+private/
+reference/
+*.log
+*.weechatlog
+*.zip
+
+# Operator and release artefacts stay outside the repository
+/commit.sh
+/*.tar.gz
+/*.tar.xz
+/*_CHECKPOINT_*.md
+/*_SHA256SUMS
+
+# Audio belongs to the live presentation layer, not the source tree
+*.mp3
+*.wav
+*.ogg
+*.flac
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store

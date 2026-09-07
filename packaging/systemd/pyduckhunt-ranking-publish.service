@@ -1,0 +1,44 @@
+[Unit]
+Description=Publish the validated pyDuckHunt ranking page
+Documentation=file:/home/mediabot/DuckHunt/docs/RANKING_PAGE.md
+ConditionPathExists=/etc/pyduckhunt/ranking-publish.toml
+ConditionPathIsSymbolicLink=!/etc/pyduckhunt/ranking-publish.toml
+ConditionPathIsDirectory=/var/www/io.teuk.org/public/DuckHunt/rankings
+# The one-second debounce below caps path-triggered starts. Keep a separate
+# ceiling high enough for that bounded rate while retaining a regression guard.
+StartLimitIntervalSec=30
+StartLimitBurst=45
+
+[Service]
+Type=oneshot
+SupplementaryGroups=mediabot
+ExecStartPre=/usr/bin/sleep 1
+ExecStart=/usr/local/libexec/pyduckhunt-publish-ranking --config /etc/pyduckhunt/ranking-publish.toml
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0022
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=read-only
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+RemoveIPC=true
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadOnlyPaths=/etc/pyduckhunt/ranking-publish.toml
+ReadOnlyPaths=/home/backupwws/pyduckhunt/pilot/public
+ReadWritePaths=/var/www/io.teuk.org/public/DuckHunt/rankings

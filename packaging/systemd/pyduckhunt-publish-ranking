@@ -1,0 +1,251 @@
+#!/usr/bin/python3
+"""Publish one configured ranking page through anchored no-follow descriptors."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import pwd
+import re
+import secrets
+import stat
+import sys
+import tomllib
+from pathlib import Path
+from typing import NamedTuple, NoReturn
+
+
+MAX_CONFIG_BYTES = 4 * 1024
+MAX_PAGE_BYTES = 4 * 1024 * 1024
+MARKERS = (
+    b"<!-- PYDUCKHUNT_RANKING_PAGE_V1 -->",
+    b'<meta name="generator" content="Coin / pyDuckHunt">',
+)
+EXECUTABLE_MARKUP = re.compile(rb"<script|<\?|<!--#|\s+on[a-z]+=", re.IGNORECASE)
+
+
+class PublisherConfiguration(NamedTuple):
+    source_directory: str
+    source_name: str
+    target_directory: str
+    target_name: str
+
+
+def fail(message: str) -> NoReturn:
+    raise SystemExit(f"[KO] {message}")
+
+
+def _configured_file(value: object, label: str) -> tuple[str, str]:
+    if (
+        type(value) is not str
+        or not value
+        or value.strip() != value
+        or any(character in value for character in ("\x00", "\r", "\n"))
+    ):
+        fail(f"{label} must be safe non-empty text")
+    path = Path(value)
+    if (
+        not path.is_absolute()
+        or path == Path("/")
+        or path.name in ("", ".", "..")
+        or path.suffix.casefold() != ".html"
+        or ".." in path.parts
+    ):
+        fail(f"{label} must be one safe absolute HTML file")
+    return str(path.parent), path.name
+
+
+def load_configuration(
+    path: str,
+    *,
+    expected_uid: int = 0,
+) -> PublisherConfiguration:
+    flags = os.O_RDONLY | os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags)
+    try:
+        details = os.fstat(descriptor)
+        if not stat.S_ISREG(details.st_mode):
+            fail("publisher configuration is not one regular file")
+        if details.st_uid != expected_uid or details.st_mode & 0o022:
+            fail("publisher configuration ownership or mode is unsafe")
+        if not 0 < details.st_size <= MAX_CONFIG_BYTES:
+            fail("publisher configuration size is outside the boundary")
+        chunks: list[bytes] = []
+        remaining = MAX_CONFIG_BYTES + 1
+        while remaining:
+            chunk = os.read(descriptor, remaining)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        payload = b"".join(chunks)
+        if len(payload) != details.st_size:
+            fail("publisher configuration changed while being read")
+    finally:
+        os.close(descriptor)
+    try:
+        configuration = tomllib.loads(payload.decode("utf-8"))
+    except (UnicodeError, tomllib.TOMLDecodeError) as error:
+        fail(f"publisher configuration is invalid: {error}")
+    if set(configuration) != {"source_file", "target_file"}:
+        fail("publisher configuration fields do not match the exact schema")
+    source_directory, source_name = _configured_file(
+        configuration["source_file"],
+        "source_file",
+    )
+    target_directory, target_name = _configured_file(
+        configuration["target_file"],
+        "target_file",
+    )
+    if source_directory == target_directory:
+        fail("publisher source and target directories must differ")
+    return PublisherConfiguration(
+        source_directory,
+        source_name,
+        target_directory,
+        target_name,
+    )
+
+
+def open_directory(path: str, *, expected_uid: int) -> int:
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags)
+    details = os.fstat(descriptor)
+    if details.st_uid != expected_uid or details.st_mode & 0o022:
+        os.close(descriptor)
+        fail(f"unsafe directory boundary: {path}")
+    return descriptor
+
+
+def read_source(
+    directory_descriptor: int,
+    source_name: str,
+    expected_uid: int,
+) -> bytes:
+    flags = os.O_RDONLY | os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(source_name, flags, dir_fd=directory_descriptor)
+    try:
+        details = os.fstat(descriptor)
+        if not stat.S_ISREG(details.st_mode):
+            fail("generated ranking is not one regular file")
+        if details.st_uid != expected_uid:
+            fail("generated ranking owner is invalid")
+        if details.st_mode & 0o022:
+            fail("generated ranking must not be group/world writable")
+        if not 0 < details.st_size <= MAX_PAGE_BYTES:
+            fail("generated ranking size is outside the boundary")
+        chunks: list[bytes] = []
+        remaining = MAX_PAGE_BYTES + 1
+        while remaining:
+            chunk = os.read(descriptor, min(remaining, 128 * 1024))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        payload = b"".join(chunks)
+        if len(payload) != details.st_size or len(payload) > MAX_PAGE_BYTES:
+            fail("generated ranking changed while being read")
+        return payload
+    finally:
+        os.close(descriptor)
+
+
+def validate(payload: bytes) -> None:
+    if any(marker not in payload for marker in MARKERS):
+        fail("generated ranking identity is absent")
+    if EXECUTABLE_MARKUP.search(payload):
+        fail("generated ranking contains executable markup")
+
+
+def publish(
+    directory_descriptor: int,
+    target_name: str,
+    payload: bytes,
+    *,
+    expected_uid: int = 0,
+    expected_gid: int = 0,
+) -> None:
+    temporary = f".{target_name}.{secrets.token_hex(12)}"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(temporary, flags, 0o644, dir_fd=directory_descriptor)
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            view = view[written:]
+        os.fchmod(descriptor, 0o644)
+        os.fchown(descriptor, expected_uid, expected_gid)
+        os.fsync(descriptor)
+    except BaseException:
+        try:
+            os.unlink(temporary, dir_fd=directory_descriptor)
+        except FileNotFoundError:
+            pass
+        raise
+    finally:
+        os.close(descriptor)
+    try:
+        os.replace(
+            temporary,
+            target_name,
+            src_dir_fd=directory_descriptor,
+            dst_dir_fd=directory_descriptor,
+        )
+        os.fsync(directory_descriptor)
+    except BaseException:
+        try:
+            os.unlink(temporary, dir_fd=directory_descriptor)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--check", action="store_true")
+    arguments = parser.parse_args(argv)
+
+    configured = load_configuration(arguments.config)
+    mediabot_uid = pwd.getpwnam("mediabot").pw_uid
+    source_directory = open_directory(
+        configured.source_directory,
+        expected_uid=mediabot_uid,
+    )
+    try:
+        payload = read_source(
+            source_directory,
+            configured.source_name,
+            mediabot_uid,
+        )
+    finally:
+        os.close(source_directory)
+    validate(payload)
+    target_directory = open_directory(
+        configured.target_directory,
+        expected_uid=0,
+    )
+    try:
+        if not arguments.check:
+            publish(
+                target_directory,
+                configured.target_name,
+                payload,
+            )
+    finally:
+        os.close(target_directory)
+    action = "validated" if arguments.check else "published atomically"
+    print(f"[OK] pyDuckHunt ranking {action}.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

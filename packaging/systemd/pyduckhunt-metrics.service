@@ -1,0 +1,47 @@
+[Unit]
+Description=Serve aggregate pyDuckHunt metrics on loopback
+Documentation=file:/home/mediabot/DuckHunt/docs/METRICS_GRAFANA.md
+After=network.target pyduckhunt@beta.service
+Wants=pyduckhunt@beta.service
+
+[Service]
+Type=simple
+User=mediabot
+Group=mediabot
+ExecStart=/home/mediabot/DuckHunt/.venv/bin/python -m pyduckhunt.metrics_server --listen 127.0.0.1 --port 9817 --source /home/backupwws/pyduckhunt/pilot/metrics/pyduckhunt.prom
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=5s
+UMask=0077
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/home/mediabot/DuckHunt/src
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=read-only
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+RemoveIPC=true
+RestrictAddressFamilies=AF_UNIX AF_INET
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+IPAddressDeny=any
+IPAddressAllow=localhost
+ReadOnlyPaths=/home/backupwws/pyduckhunt/pilot/metrics
+
+[Install]
+WantedBy=multi-user.target

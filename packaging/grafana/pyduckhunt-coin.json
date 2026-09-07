@@ -1,0 +1,198 @@
+{
+  "annotations": {"list": [{"builtIn": 1, "datasource": {"type": "grafana", "uid": "-- Grafana --"}, "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "type": "dashboard"}]},
+  "description": "État opérationnel et activité agrégée de Coin / pyDuckHunt.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "$DS_PROMETHEUS"},
+      "description": "État READY du transport IRC.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [{"options": {"0": {"color": "red", "text": "Indisponible"}, "1": {"color": "green", "text": "Prêt"}}, "type": "value"}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "pyduckhunt_irc_ready", "instant": true, "legendFormat": "READY", "range": false, "refId": "A"}],
+      "title": "Coin",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$DS_PROMETHEUS"},
+      "description": "Âge du dernier échantillon généré par Coin.",
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 30}, {"color": "red", "value": 60}]}, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "time() - pyduckhunt_metrics_generated_timestamp_seconds", "instant": true, "legendFormat": "Âge", "range": false, "refId": "A"}],
+      "title": "Fraîcheur",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$DS_PROMETHEUS"},
+      "fieldConfig": {"defaults": {"color": {"mode": "fixedColor", "fixedColor": "blue"}, "decimals": 0}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "pyduckhunt_players", "instant": true, "legendFormat": "Joueurs", "range": false, "refId": "A"}],
+      "title": "Joueurs classés",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$DS_PROMETHEUS"},
+      "fieldConfig": {"defaults": {"color": {"mode": "fixedColor", "fixedColor": "green"}, "decimals": 0}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "pyduckhunt_hits_total", "instant": true, "legendFormat": "Touches", "range": false, "refId": "A"}],
+      "title": "Canards touchés",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$DS_PROMETHEUS"},
+      "fieldConfig": {"defaults": {"color": {"mode": "fixedColor", "fixedColor": "yellow"}, "decimals": 0}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 0},
+      "id": 5,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "pyduckhunt_golden_hits_total", "instant": true, "legendFormat": "Dorés", "range": false, "refId": "A"}],
+      "title": "Canards dorés",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$DS_PROMETHEUS"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [{"options": {"0": {"text": "Aucun"}, "1": {"color": "orange", "text": "En vol"}}, "type": "value"}], "thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}, {"color": "orange", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 0},
+      "id": 6,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "pyduckhunt_flight_active", "instant": true, "legendFormat": "Vol", "range": false, "refId": "A"}],
+      "title": "Vol actuel",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 4},
+      "id": 20,
+      "panels": [],
+      "title": "Activité",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$DS_PROMETHEUS"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 14, "gradientMode": "opacity", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 4, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}}, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "id": 7,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "increase(pyduckhunt_hits_total[$__rate_interval])", "legendFormat": "Touches", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "increase(pyduckhunt_golden_hits_total[$__rate_interval])", "legendFormat": "Dorés", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "increase(pyduckhunt_misses_total[$__rate_interval])", "legendFormat": "Ratés", "range": true, "refId": "C"}
+      ],
+      "title": "Chasse",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$DS_PROMETHEUS"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "commandes/s", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "opacity", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 4, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}}, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "id": 8,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "rate(pyduckhunt_commands_dispatched_total[$__rate_interval])", "legendFormat": "Traitées", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "rate(pyduckhunt_commands_invalid_total[$__rate_interval])", "legendFormat": "Invalides", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "rate(pyduckhunt_messages_ignored_total[$__rate_interval])", "legendFormat": "Ignorées", "range": true, "refId": "C"}
+      ],
+      "title": "Flux IRC",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 13},
+      "id": 21,
+      "panels": [],
+      "title": "Calendrier et état durable",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$DS_PROMETHEUS"},
+      "fieldConfig": {"defaults": {"color": {"mode": "continuous-GrYlRd"}, "decimals": 0, "max": 100, "min": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}}, "overrides": []},
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 14},
+      "id": 9,
+      "options": {"displayMode": "gradient", "maxVizHeight": 300, "minVizHeight": 16, "minVizWidth": 8, "namePlacement": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "sizing": "auto", "valueMode": "color"},
+      "targets": [{"editorMode": "code", "expr": "100 * pyduckhunt_schedule_next_index / clamp_min(pyduckhunt_schedule_flights, 1)", "instant": true, "legendFormat": "Créneaux passés", "range": false, "refId": "A"}],
+      "title": "Avancement du jour",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$DS_PROMETHEUS"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}, "unit": "dateTimeAsIso"}, "overrides": []},
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 14},
+      "id": 10,
+      "options": {"colorMode": "none", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "1000 * pyduckhunt_schedule_next_deadline_timestamp_seconds", "instant": true, "legendFormat": "Prochain créneau", "range": false, "refId": "A"}],
+      "title": "Prochain créneau UTC",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$DS_PROMETHEUS"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "decimals": 0}, "overrides": []},
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 14},
+      "id": 11,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [
+        {"editorMode": "code", "expr": "pyduckhunt_schedule_flights", "instant": true, "legendFormat": "Plan du jour", "range": false, "refId": "A"},
+        {"editorMode": "code", "expr": "pyduckhunt_recommended_daily_flights", "instant": true, "legendFormat": "Plan recommandé", "range": false, "refId": "B"},
+        {"editorMode": "code", "expr": "pyduckhunt_community_progress", "instant": true, "legendFormat": "Progression", "range": false, "refId": "C"}
+      ],
+      "title": "Planification",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 20},
+      "id": 22,
+      "panels": [],
+      "title": "Exploitation",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$DS_PROMETHEUS"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 8, "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 3, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}}}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 21},
+      "id": 12,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "pyduckhunt_persistence_pending", "legendFormat": "Écritures en attente", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "increase(pyduckhunt_schedule_backpressure_total[$__rate_interval])", "legendFormat": "Backpressure", "range": true, "refId": "B"}
+      ],
+      "title": "Persistance et pression",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$DS_PROMETHEUS"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "custom": {"axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "erreurs", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 8, "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 3, "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false, "stacking": {"group": "A", "mode": "none"}, "thresholdsStyle": {"mode": "off"}}}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 21},
+      "id": 13,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "increase(pyduckhunt_network_failures_total[$__rate_interval])", "legendFormat": "Réseau", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "increase(pyduckhunt_state_publication_failures_total[$__rate_interval])", "legendFormat": "Publication état", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "increase(pyduckhunt_metrics_publication_failures_total[$__rate_interval])", "legendFormat": "Publication métriques", "range": true, "refId": "C"}
+      ],
+      "title": "Erreurs observées",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["irc", "pyduckhunt", "coin"],
+  "templating": {"list": [{"current": {}, "hide": 0, "includeAll": false, "label": "Prometheus", "multi": false, "name": "DS_PROMETHEUS", "options": [], "query": "prometheus", "refresh": 1, "regex": "", "skipUrlSync": false, "type": "datasource"}]},
+  "time": {"from": "now-24h", "to": "now"},
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "Coin — pyDuckHunt",
+  "uid": "pyduckhunt-coin",
+  "version": 1,
+  "weekStart": "monday"
+}

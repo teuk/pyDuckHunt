@@ -1,0 +1,54 @@
+[irc]
+host = "irc.dev.invalid"
+port = 6697
+tls = true
+nickname = "pyDuckHunt"
+fallback_nickname = "pyDuckHunt_"
+bot_mode = false
+channels = ["#development"]
+password_environment = "PYDUCKHUNT_IRC_PASSWORD"
+
+[runtime]
+log_level = "INFO"
+state_directory = "state"
+log_directory = "logs"
+# Optional absolute spool file generated atomically from durable game state.
+# ranking_page_path = "/var/lib/pyduckhunt/public/player-rankings.html"
+# Optional Prometheus text snapshot with aggregate, bounded-cardinality data.
+# metrics_page_path = "/var/lib/pyduckhunt/metrics/pyduckhunt.prom"
+
+[game]
+enabled = false
+flights_per_day = 18
+golden_weight_per_eighteen = 1
+flight_lifetime_seconds = 300
+# Kept at zero until an unusual-loot frequency is approved for the pilot.
+unusual_loot_chance_per_thousand = 0
+# Disabled by default; live operators may enable OS-randomized flight presentation.
+anti_cheat = false
+# Empty keeps !shop link-free until an operator publishes a catalog page.
+shop_url = ""
+# Empty keeps !duckrank link-free until an operator publishes a ranking page.
+ranking_url = ""
+
+[partyline]
+# Disabled for fresh installs. The beta deployment binds this listener to loopback.
+enabled = false
+bind_host = "127.0.0.1"
+# Zero lets the operating system select an ephemeral port for local test instances.
+port = 0
+# At least one exact Services account or IRC mask is required when enabled.
+bootstrap_accounts = []
+bootstrap_masks = []
+# Empty disables server-offered /ctcp Coin CHAT while active /dcc chat still works.
+dcc_public_ip = ""
+# Zero/zero lets the operating system select temporary DCC listener ports.
+dcc_port_min = 0
+dcc_port_max = 0
+# Optional unplanned standard flights. Disabled by default and bounded to one
+# configured IRC channel. Production-like intervals must remain 15m..24h.
+spontaneous_launch_enabled = false
+spontaneous_launch_channel = ""
+spontaneous_launch_min_seconds = 0
+spontaneous_launch_max_seconds = 0
+spontaneous_launch_announcement = "allez, je lance un canard"

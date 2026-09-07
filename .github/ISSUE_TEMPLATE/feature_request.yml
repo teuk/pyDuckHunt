@@ -1,0 +1,33 @@
+name: Feature request
+description: Propose a bounded, replayable pyDuckHunt improvement.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What player or operator problem should be solved?
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Proposed behavior
+      description: Describe observable IRC behavior using synthetic identities.
+    validations:
+      required: true
+  - type: textarea
+    id: replay
+    attributes:
+      label: Determinism and replay
+      description: Identify any clock, random, network or persistence boundary involved.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: This request contains no credential, private log, hostmask or real player identity.
+          required: true

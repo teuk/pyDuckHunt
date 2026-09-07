@@ -1,0 +1,1 @@
+"""pyDuckHunt test suite."""

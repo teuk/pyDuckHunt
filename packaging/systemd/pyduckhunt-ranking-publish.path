@@ -1,0 +1,17 @@
+[Unit]
+Description=Watch the generated pyDuckHunt ranking page
+Documentation=file:/home/mediabot/DuckHunt/docs/RANKING_PAGE.md
+ConditionPathExists=/etc/pyduckhunt/ranking-publish.toml
+ConditionPathIsSymbolicLink=!/etc/pyduckhunt/ranking-publish.toml
+ConditionPathIsDirectory=/home/backupwws/pyduckhunt/pilot/public
+ConditionPathIsDirectory=/var/www/io.teuk.org/public/DuckHunt/rankings
+
+[Path]
+# Coin replaces the generated file atomically, so watch its containing
+# directory rather than retaining the inode of one exact file.
+PathChanged=/home/backupwws/pyduckhunt/pilot/public
+PathChanged=/etc/pyduckhunt
+Unit=pyduckhunt-ranking-publish.service
+
+[Install]
+WantedBy=multi-user.target

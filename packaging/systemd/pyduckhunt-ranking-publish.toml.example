@@ -1,0 +1,4 @@
+# Root-owned publisher boundary. Install as:
+# /etc/pyduckhunt/ranking-publish.toml
+source_file = "/home/backupwws/pyduckhunt/pilot/public/player-rankings.html"
+target_file = "/var/www/io.teuk.org/public/DuckHunt/rankings/index.html"

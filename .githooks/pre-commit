@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+PYTHON="${ROOT}/.venv/bin/python"
+if [[ ! -x "$PYTHON" ]]; then
+    PYTHON="$(command -v python3)"
+fi
+
+export PYTHONPATH="${ROOT}/src"
+"$PYTHON" tools/project_guard.py
+"$PYTHON" -m compileall -q src tools tests
