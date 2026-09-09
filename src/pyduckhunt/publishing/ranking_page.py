@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pyduckhunt.i18n import tr, localized, localized_method, validate_language
+
 import html
 import os
 import re
@@ -31,6 +33,7 @@ class RankingPagePublisher:
         path: str | Path,
         *,
         excluded_nicknames: tuple[str, ...] = (),
+        language: str = "fr",
     ) -> None:
         target = Path(path)
         if (
@@ -41,6 +44,7 @@ class RankingPagePublisher:
             or ".." in target.parts
         ):
             raise ValueError("ranking page target must be a safe absolute HTML path")
+        self.language = validate_language(language)
         self.path = target
         self.excluded_nicknames = excluded_nicknames
 
@@ -50,6 +54,7 @@ class RankingPagePublisher:
         encoded = render_ranking_page(
             state,
             excluded_nicknames=self.excluded_nicknames,
+            language=self.language,
         )
         if len(encoded) > MAX_RANKING_PAGE_BYTES:
             raise ValueError("ranking page exceeds the bounded size")
@@ -82,6 +87,7 @@ class RankingPagePublisher:
                 temporary_path.unlink(missing_ok=True)
 
 
+@localized
 def render_ranking_page(
     state: GameState,
     *,
@@ -96,59 +102,79 @@ def render_ranking_page(
     podium = _podium(players)
     table = _table(state, players)
     updated = _updated_at(state.now_ns)
-    document = f"""<!doctype html>
-<html lang="fr" data-pyduckhunt-ranking="1">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="generator" content="Coin / pyDuckHunt">
-  <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#071013">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'">
-  <title>Classement pyDuckHunt — i/o</title>
-  <meta name="description" content="Classement public et statistiques des chasseurs pyDuckHunt sur i/o.">
-  <style>{_STYLE}{DH051_REFINEMENT_STYLE}{_INVENTORY_STYLE}</style>
-</head>
-<body>
-  <!-- PYDUCKHUNT_RANKING_PAGE_V1 -->
-  <div class="site-noise" aria-hidden="true"></div>
-  <header class="site-header">
-    <div class="site-container header-inner">
-      <a class="brand" href="/" aria-label="i/o — accueil"><span class="brand-mark">i/o</span><span class="brand-copy">Epiknet<br>mediabot_v3</span></a>
-      <nav class="primary-nav" aria-label="Navigation principale"><a href="/">Accueil</a><a href="/#mediabot">Mediabot</a><a href="/DuckHunt/">DuckHunt</a><a href="/#connexion">Connexion</a></nav>
-      <div class="header-status"><i></i><span>Coin en ligne</span></div>
-    </div>
-  </header>
-  <div class="duckhunt-subnav">
-    <div class="site-container duckhunt-subnav-inner">
-      <a class="duckhunt-subbrand" href="/DuckHunt/"><span class="target-mark" aria-hidden="true">◎</span> Coin / pyDuckHunt</a>
-      <nav aria-label="Navigation pyDuckHunt"><a href="/DuckHunt/">Vue d’ensemble</a><a href="/DuckHunt/shop/">Boutique</a><a href="/DuckHunt/levels/">Niveaux</a><a href="/DuckHunt/commands/">Commandes</a><a href="/DuckHunt/rankings/" aria-current="page">Classement</a></nav>
-    </div>
-  </div>
-  <main>
-    <section class="ranking-hero">
-      <div class="site-container hero-grid">
-        <div>
-          <div class="eyebrow"><span></span>TABLEAU DE CHASSE · DONNÉES DURABLES</div>
-          <h1>Classement des <em>chasseurs.</em></h1>
-          <p>Les places suivent le nombre de canards touchés, puis le meilleur temps et l’identité IRC canonique pour départager les égalités.</p>
-        </div>
-        <div class="hero-signal" aria-hidden="true"><span>RANK</span><b>01</b><i>\\_O&lt;</i></div>
-      </div>
-    </section>
-    <section class="site-container summary-grid" aria-label="Résumé du classement">{summary}</section>
-    <section class="site-container ranking-section">
-      <div class="section-heading"><div><span>LE PODIUM</span><h2>Les fines gâchettes du canal.</h2></div><p>Actualisé automatiquement par Coin après chaque changement durable.</p></div>
-      {podium}
-      <div class="table-heading"><div><span>TABLEAU COMPLET</span><h2>Tous les chasseurs</h2></div><time datetime="{_datetime_attribute(state.now_ns)}">Mise à jour : {updated}</time></div>
-      {table}
-      <p class="ranking-note">XP désigne le solde actuellement disponible. La précision affichée est celle de l’arme au niveau courant.</p>
-    </section>
-  </main>
-  <footer class="site-footer"><div class="site-container footer-inner"><span>io.teuk.org · Coin / pyDuckHunt</span><span>Classement généré depuis l’état durable du jeu.</span></div></footer>
-</body>
-</html>
-"""
+    document = tr((
+        '<!doctype html>\n'
+        '<html lang="fr" data-pyduckhunt-ranking="1">\n'
+        '<head>\n'
+        '  <meta charset="utf-8">\n'
+        '  <meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        '  <meta name="generator" content="Coin / pyDuckHunt">\n'
+        '  <meta name="color-scheme" content="dark">\n'
+        '  <meta name="theme-color" content="#071013">\n'
+        '  <meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src '
+        "'unsafe-inline'; img-src 'none'; font-src 'none'; base-uri 'none'; form-action 'none'; "
+        'frame-ancestors \'self\'">\n'
+        '  <title>Classement pyDuckHunt — i/o</title>\n'
+        '  <meta name="description" content="Classement public et statistiques des chasseurs '
+        'pyDuckHunt sur i/o.">\n'
+        '  <style>{0}{1}{2}</style>\n'
+        '</head>\n'
+        '<body>\n'
+        '  <!-- PYDUCKHUNT_RANKING_PAGE_V1 -->\n'
+        '  <div class="site-noise" aria-hidden="true"></div>\n'
+        '  <header class="site-header">\n'
+        '    <div class="site-container header-inner">\n'
+        '      <a class="brand" href="/" aria-label="i/o — accueil"><span '
+        'class="brand-mark">i/o</span><span class="brand-copy">Epiknet<br>mediabot_v3</span></a>\n'
+        '      <nav class="primary-nav" aria-label="Navigation principale"><a '
+        'href="/">Accueil</a><a href="/#mediabot">Mediabot</a><a '
+        'href="/DuckHunt/">DuckHunt</a><a href="/#connexion">Connexion</a></nav>\n'
+        '      <div class="header-status"><i></i><span>Coin en ligne</span></div>\n'
+        '    </div>\n'
+        '  </header>\n'
+        '  <div class="duckhunt-subnav">\n'
+        '    <div class="site-container duckhunt-subnav-inner">\n'
+        '      <a class="duckhunt-subbrand" href="/DuckHunt/"><span class="target-mark" '
+        'aria-hidden="true">◎</span> Coin / pyDuckHunt</a>\n'
+        '      <nav aria-label="Navigation pyDuckHunt"><a href="/DuckHunt/">Vue d’ensemble</a><a '
+        'href="/DuckHunt/shop/">Boutique</a><a href="/DuckHunt/levels/">Niveaux</a><a '
+        'href="/DuckHunt/commands/">Commandes</a><a href="/DuckHunt/rankings/" '
+        'aria-current="page">Classement</a></nav>\n'
+        '    </div>\n'
+        '  </div>\n'
+        '  <main>\n'
+        '    <section class="ranking-hero">\n'
+        '      <div class="site-container hero-grid">\n'
+        '        <div>\n'
+        '          <div class="eyebrow"><span></span>TABLEAU DE CHASSE · DONNÉES DURABLES</div>\n'
+        '          <h1>Classement des <em>chasseurs.</em></h1>\n'
+        '          <p>Les places suivent le nombre de canards touchés, puis le meilleur temps et '
+        'l’identité IRC canonique pour départager les égalités.</p>\n'
+        '        </div>\n'
+        '        <div class="hero-signal" '
+        'aria-hidden="true"><span>RANK</span><b>01</b><i>\\_O&lt;</i></div>\n'
+        '      </div>\n'
+        '    </section>\n'
+        '    <section class="site-container summary-grid" aria-label="Résumé du '
+        'classement">{3}</section>\n'
+        '    <section class="site-container ranking-section">\n'
+        '      <div class="section-heading"><div><span>LE PODIUM</span><h2>Les fines gâchettes '
+        'du canal.</h2></div><p>Actualisé automatiquement par Coin après chaque changement '
+        'durable.</p></div>\n'
+        '      {4}\n'
+        '      <div class="table-heading"><div><span>TABLEAU COMPLET</span><h2>Tous les '
+        'chasseurs</h2></div><time datetime="{5}">Mise à jour : {6}</time></div>\n'
+        '      {7}\n'
+        '      <p class="ranking-note">XP désigne le solde actuellement disponible. La précision '
+        'affichée est celle de l’arme au niveau courant.</p>\n'
+        '    </section>\n'
+        '  </main>\n'
+        '  <footer class="site-footer"><div class="site-container '
+        'footer-inner"><span>io.teuk.org · Coin / pyDuckHunt</span><span>Classement généré '
+        'depuis l’état durable du jeu.</span></div></footer>\n'
+        '</body>\n'
+        '</html>\n'
+    ), _STYLE, DH051_REFINEMENT_STYLE, _INVENTORY_STYLE, summary, podium, _datetime_attribute(state.now_ns), updated, table)
     return document.encode("utf-8")
 
 
@@ -160,10 +186,10 @@ def _summary(state: GameState, players: tuple[PlayerState, ...]) -> str:
         default=None,
     )
     facts = (
-        ("Chasseurs", str(len(players))),
-        ("Canards touchés", _integer(total_hits)),
-        ("Canards dorés", _integer(total_golden)),
-        ("Meilleur temps", _time(best)),
+        (tr('Chasseurs'), str(len(players))),
+        (tr('Canards touchés'), _integer(total_hits)),
+        (tr('Canards dorés'), _integer(total_golden)),
+        (tr('Meilleur temps'), _time(best)),
     )
     return "".join(
         f'<article><span>{label}</span><strong>{value}</strong></article>'
@@ -173,77 +199,80 @@ def _summary(state: GameState, players: tuple[PlayerState, ...]) -> str:
 
 def _podium(players: tuple[PlayerState, ...]) -> str:
     if not players:
-        return '<div class="empty-state"><b>\\_O&lt;</b><strong>Aucun chasseur classé.</strong><span>Le premier tir réussi ouvrira le tableau.</span></div>'
+        return tr('<div class="empty-state"><b>\\_O&lt;</b><strong>Aucun chasseur classé.</strong><span>Le premier tir réussi ouvrira le tableau.</span></div>')
     cards = []
     for place, player in enumerate(players[:3], start=1):
         policy = level_policy(player.level)
         cards.append(
-            f'<article class="podium-card place-{place}"><span class="place">#{place:02d}</span>'
-            f'<div class="podium-name">{_escape(player.nickname)}</div>'
-            f'<div class="podium-score"><strong>{_integer(player.hits)}</strong><span>canards</span></div>'
-            f'<div class="podium-meta"><span>Niv. {player.level}</span><span>{_escape(policy.weapon_label)}</span><span>{_time(player.best_time_ms)}</span></div></article>'
+            tr((
+                '<article class="podium-card place-{0}"><span class="place">#{1:02d}</span><div '
+                'class="podium-name">{2}</div><div '
+                'class="podium-score"><strong>{3}</strong><span>canards</span></div><div '
+                'class="podium-meta"><span>Niv. '
+                '{4}</span><span>{5}</span><span>{6}</span></div></article>'
+            ), place, place, _escape(player.nickname), _integer(player.hits), player.level, _escape(tr(policy.weapon_label)), _time(player.best_time_ms))
         )
     return '<div class="podium-grid">' + "".join(cards) + "</div>"
 
 
 def _table(state: GameState, players: tuple[PlayerState, ...]) -> str:
     if not players:
-        return '<div class="table-empty">En attente du premier chasseur.</div>'
+        return tr('<div class="table-empty">En attente du premier chasseur.</div>')
     rows = []
     for place, player in enumerate(players, start=1):
         policy = level_policy(player.level)
         values = (
             ("Place", f'<span class="rank-badge">{place}</span>', "place-cell"),
             (
-                "Chasseur",
+                tr('Chasseur'),
                 f'<strong class="hunter">{_escape(player.nickname)}</strong>',
                 "hunter-cell",
             ),
             (
-                "Chasse",
+                tr("Chasse"),
                 _fact_group(
                     (
-                        ("Canards", "can.", _integer(player.hits)),
-                        ("Canards dorés", "dorés", _integer(player.golden_hits)),
+                        (tr("Canards"), tr("can."), _integer(player.hits)),
+                        (tr('Canards dorés'), tr('dorés'), _integer(player.golden_hits)),
                     )
                 ),
                 "hunt-cell",
             ),
-            ("Meilleur temps", _time(player.best_time_ms), "time-cell"),
+            (tr('Meilleur temps'), _time(player.best_time_ms), "time-cell"),
             (
-                "Progression",
+                tr("Progression"),
                 _fact_group(
                     (
-                        ("Niveau", "niv.", str(player.level)),
-                        ("XP disponible", "xp", _integer(available_experience(player))),
+                        (tr('Niveau'), tr("niv."), str(player.level)),
+                        (tr('XP disponible'), "xp", _integer(available_experience(player))),
                     )
                 ),
                 "progress-cell",
             ),
-            ("Arme", _escape(policy.weapon_label), "weapon-cell"),
+            (tr('Arme'), _escape(tr(policy.weapon_label)), "weapon-cell"),
             (
-                "État",
+                tr('État'),
                 _fact_group(
                     (
-                        ("Précision", "préc.", _percent(policy.accuracy_bps)),
+                        (tr('Précision'), tr('préc.'), _percent(policy.accuracy_bps)),
                         (
                             "Karma",
                             "karma",
                             _signed_percent(player_karma_basis_points(player)),
                         ),
-                        ("Fatigue", "fat.", _decimal(player.fatigue_centi)),
+                        (tr('Fatigue'), "fat.", _decimal(player.fatigue_centi)),
                     )
                 ),
                 "condition-cell",
             ),
             (
-                "Charge",
+                tr("Charge"),
                 _fact_group(
                     (
-                        ("Munitions", "mun.", f"{player.ammo}/{player.capacity}"),
+                        (tr("Munitions"), tr('mun.'), f"{player.ammo}/{player.capacity}"),
                         (
-                            "Chargeurs",
-                            "charg.",
+                            tr("Chargeurs"),
+                            tr('charg.'),
                             f"{player.magazines}/{player.magazine_capacity}",
                         ),
                     )
@@ -251,20 +280,20 @@ def _table(state: GameState, players: tuple[PlayerState, ...]) -> str:
                 "ammunition-cell",
             ),
             (
-                "Tirs",
+                tr('Tirs'),
                 _fact_group(
                     (
-                        ("Tirs ratés", "ratés", _integer(player.misses)),
-                        ("Tirs sauvages", "sauv.", _integer(player.wild_shots)),
-                        ("Tirs à vide", "vide", _integer(player.empty_shots)),
-                        ("Arme enrayée", "enray.", _integer(player.jammed_shots)),
+                        (tr('Tirs ratés'), tr('ratés'), _integer(player.misses)),
+                        (tr('Tirs sauvages'), tr('sauv.'), _integer(player.wild_shots)),
+                        (tr('Tirs à vide'), tr('vide'), _integer(player.empty_shots)),
+                        (tr('Arme enrayée'), tr('enray.'), _integer(player.jammed_shots)),
                         (
-                            "Rechargements compulsifs",
-                            "recharg.",
+                            tr('Rechargements compulsifs'),
+                            tr("recharg."),
                             _integer(player.compulsive_reloads),
                         ),
                         (
-                            "Confiscations",
+                            tr("Confiscations"),
                             "confisq.",
                             _integer(player.confiscations),
                         ),
@@ -277,23 +306,23 @@ def _table(state: GameState, players: tuple[PlayerState, ...]) -> str:
                 "Accidents",
                 _fact_group(
                     (
-                        ("Tirs reçus", "reçus", _integer(player.shots_received)),
+                        (tr('Tirs reçus'), tr('reçus'), _integer(player.shots_received)),
                         (
-                            "Tirs déviés",
-                            "déviés",
+                            tr('Tirs déviés'),
+                            tr('déviés'),
                             _integer(player.incidents_deflected),
                         ),
                         (
-                            "Tirs absorbés",
+                            tr('Tirs absorbés'),
                             "absorb.",
                             _integer(player.incidents_absorbed),
                         ),
-                        ("Décès", "décès", _integer(player.deaths)),
+                        (tr('Décès'), tr('décès'), _integer(player.deaths)),
                     )
                 ),
                 "incidents-cell",
             ),
-            ("Inventaire", _inventory_details(state, player), "inventory-cell"),
+            (tr('Inventaire'), _inventory_details(state, player), "inventory-cell"),
         )
         cells = "".join(
             _table_cell(label, value, class_name=class_name)
@@ -302,26 +331,29 @@ def _table(state: GameState, players: tuple[PlayerState, ...]) -> str:
         rows.append(f'<tr class="rank-{place}">{cells}</tr>')
     headings = (
         "Place",
-        "Chasseur",
-        "Chasse",
-        "Meilleur temps",
-        "Progression",
-        "Arme",
-        "État",
-        "Charge",
-        "Tirs",
+        tr('Chasseur'),
+        tr("Chasse"),
+        tr('Meilleur temps'),
+        tr("Progression"),
+        tr('Arme'),
+        tr('État'),
+        tr("Charge"),
+        tr('Tirs'),
         "Accidents",
-        "Inventaire",
+        tr('Inventaire'),
     )
     header = "".join(f'<th scope="col">{heading}</th>' for heading in headings)
     return (
-        '<div class="ranking-table-shell" aria-label="Tableau complet du classement">'
-        '<table><caption>Classement complet des chasseurs pyDuckHunt</caption>'
-        '<colgroup><col class="col-place"><col class="col-hunter"><col class="col-hunt">'
-        '<col class="col-time"><col class="col-progress"><col class="col-weapon">'
-        '<col class="col-condition"><col class="col-ammunition"><col class="col-shots">'
-        '<col class="col-incidents"><col class="col-inventory"></colgroup>'
-        f"<thead><tr>{header}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
+        tr((
+            '<div class="ranking-table-shell" aria-label="Tableau complet du '
+            'classement"><table><caption>Classement complet des chasseurs '
+            'pyDuckHunt</caption><colgroup><col class="col-place"><col class="col-hunter"><col '
+            'class="col-hunt"><col class="col-time"><col class="col-progress"><col '
+            'class="col-weapon"><col class="col-condition"><col class="col-ammunition"><col '
+            'class="col-shots"><col class="col-incidents"><col '
+            'class="col-inventory"></colgroup><thead><tr>{0}</tr></thead><tbody>{1}</tbody></table></'
+            'div>'
+        ), header, ''.join(rows))
     )
 
 
@@ -358,36 +390,36 @@ def _inventory_details(state: GameState, player: PlayerState) -> str:
         for item in line.split(" | ")
         if item.strip()
     )
-    label = f"Inventaire de {player.nickname}"
+    label = tr('Inventaire de {0}', player.nickname)
     tooltip = label + "\n" + "\n".join(lines)
     contents = "".join(f"<li>{_escape(item)}</li>" for item in items)
     return (
-        '<details class="inventory-details" data-inventory="1">'
-        f'<summary title="{_escape_attribute(tooltip)}" '
-        f'aria-label="Afficher l’inventaire de {_escape_attribute(player.nickname)}">'
-        '<span class="inventory-icon" aria-hidden="true">🎒</span>'
-        '<span class="sr-only">Afficher l’inventaire</span></summary>'
-        f'<div class="inventory-panel"><strong>{_escape(label)}</strong>'
-        f'<ul>{contents}</ul></div></details>'
+        tr((
+            '<details class="inventory-details" data-inventory="1"><summary title="{0}" '
+            'aria-label="Afficher l’inventaire de {1}"><span class="inventory-icon" '
+            'aria-hidden="true">🎒</span><span class="sr-only">Afficher '
+            'l’inventaire</span></summary><div '
+            'class="inventory-panel"><strong>{2}</strong><ul>{3}</ul></div></details>'
+        ), _escape_attribute(tooltip), _escape_attribute(player.nickname), _escape(label), contents)
     )
 
 
 def _plain_inventory_line(value: str) -> str:
     cleaned = _IRC_FORMATTING.sub("", value).strip()
-    if cleaned.startswith("[Inventaire] "):
-        cleaned = cleaned.removeprefix("[Inventaire] ")
+    if cleaned.startswith(tr('[Inventaire] ')):
+        cleaned = cleaned.removeprefix(tr('[Inventaire] '))
     return cleaned.removeprefix("| ").strip()
 
 
 def _updated_at(value_ns: int) -> str:
     if value_ns == 0:
-        return "initialisation"
+        return tr("initialisation")
     try:
         return datetime.fromtimestamp(value_ns / 1_000_000_000, UTC).strftime(
             "%d/%m/%Y %H:%M:%S UTC"
         )
     except (OSError, OverflowError, ValueError):
-        return f"horodatage durable {value_ns} ns"
+        return tr('horodatage durable {0} ns', value_ns)
 
 
 def _datetime_attribute(value_ns: int) -> str:

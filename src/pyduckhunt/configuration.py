@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from ipaddress import IPv4Address, ip_address
 from pathlib import Path
 
+from pyduckhunt.i18n import validate_language
 from pyduckhunt.irc.socket_adapter import IRCEndpoint
 from pyduckhunt.irc.transport import IRCTransportPolicy
 from pyduckhunt.identity import rfc1459_casefold
@@ -69,6 +70,10 @@ class GameConfiguration:
     ranking_url: str | None = None
     anti_cheat: bool = False
     statistics_excluded_nicknames: tuple[str, ...] = ()
+    language: str = "fr"
+
+    def __post_init__(self) -> None:
+        validate_language(self.language)
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,6 +242,7 @@ def parse_application_configuration(
             "ranking_url",
             "anti_cheat",
             "statistics_excluded_nicknames",
+            "language",
         ),
     )
     partyline_raw = root.get("partyline")
@@ -311,6 +317,7 @@ def parse_application_configuration(
 
     game_configuration = GameConfiguration(
         enabled=_truth(game["enabled"], "game enabled flag"),
+        language=validate_language(game.get("language", "fr")),
         flights_per_day=_integer(game["flights_per_day"], "flights per day"),
         golden_weight_per_eighteen=_integer(
             game["golden_weight_per_eighteen"],
@@ -376,7 +383,7 @@ def parse_application_configuration(
             spontaneous_launch_announcement=_text(
                 partyline.get(
                     "spontaneous_launch_announcement",
-                    "allez, je lance un canard",
+                    "allez, je lance un canard" if game_configuration.language == "fr" else "all right, here comes a duck",
                 ),
                 "spontaneous launch announcement",
             ),

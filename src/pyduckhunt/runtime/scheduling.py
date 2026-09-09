@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pyduckhunt.i18n import validate_language, localized_method, tr
+
 import threading
 import time
 from collections.abc import Callable
@@ -305,6 +307,7 @@ class RuntimeSchedulingAdapter:
         *,
         policy: SchedulingPolicy = SchedulingPolicy(),
         anti_cheat: bool = False,
+        language: str = "fr",
         flight_appearance_source: FlightAppearanceSource | None = None,
     ) -> None:
         if not isinstance(runtime, RuntimeOrchestrator):
@@ -337,6 +340,7 @@ class RuntimeSchedulingAdapter:
             if folded in canonical_channels:
                 raise ValueError("scheduling adapter channels must be unique")
             canonical_channels.add(folded)
+        self.language = validate_language(language)
         self.runtime = runtime
         self.channels = channels
         self.source = source
@@ -346,6 +350,7 @@ class RuntimeSchedulingAdapter:
         self._last_now_ns: int | None = None
         self._owner_thread = threading.get_ident()
 
+    @localized_method
     def step(self, now_ns: int) -> ScheduleStepResult:
         self._ensure_owner()
         self._accept_now(now_ns)

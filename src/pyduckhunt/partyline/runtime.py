@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pyduckhunt.i18n import validate_language, tr, localized, localized_method
+
 import errno
 import ipaddress
 import re
@@ -157,6 +159,7 @@ class PartylineController:
         network_status: NetworkStatusProvider,
         *,
         observer: PartylineObserver | None = None,
+        language: str = "fr",
         flight_lifetime_ns: int = 300 * 1_000_000_000,
         anti_cheat: bool = False,
         integer_source: IntegerSource | None = None,
@@ -183,6 +186,7 @@ class PartylineController:
         )
         if not callable(selected_integers):
             raise ValueError("partyline integer source must be callable")
+        self.language = validate_language(language)
         self.configuration = configuration
         self.runtime = runtime
         self.user_store = PartylineUserStore(
@@ -223,6 +227,7 @@ class PartylineController:
     def authenticated_count(self) -> int:
         return sum(session.handle is not None for session in self._sessions.values())
 
+    @localized_method
     def start(self, now_ns: int) -> None:
         self._accept_now(now_ns)
         if not self.enabled:
@@ -243,6 +248,7 @@ class PartylineController:
             f"bind={self.configuration.bind_host} port={self.bound_port}"
         )
 
+    @localized_method
     def close(self, reason: str = "shutdown") -> None:
         had_resources = bool(
             self._listener is not None
@@ -265,6 +271,7 @@ class PartylineController:
         if self.enabled and had_resources:
             self._emit(f"event=listener-stopped reason={_safe_atom(reason)}")
 
+    @localized_method
     def poll(self, now_ns: int) -> bool:
         """Advance every non-blocking socket once; return whether work occurred."""
 
@@ -279,6 +286,7 @@ class PartylineController:
         changed = self._poll_spontaneous_launch(now_ns) or changed
         return changed
 
+    @localized_method
     def handle_irc(
         self,
         now_ns: int,
@@ -336,7 +344,7 @@ class PartylineController:
         if text.casefold().startswith("pass "):
             self._notice(
                 nickname,
-                "Mot de passe refusé sur IRC : choisissez-le dans la partyline.",
+                tr('Mot de passe refusé sur IRC : choisissez-le dans la partyline.'),
             )
             return True
         payload = _ctcp_payload(text)
@@ -421,12 +429,12 @@ class PartylineController:
             )
 
         if operation is None or nickname is None:
-            self.runtime.emit_priority(render_reply((f"{owner.handle} > Usage : {usage}",)))
+            self.runtime.emit_priority(render_reply((tr('{0} > Usage : {1}', owner.handle, usage),)))
             return
         before_player = self.runtime.state.player(rfc1459_casefold(nickname))
         if before_player is None:
             self.runtime.emit_priority(
-                render_reply((f"{owner.handle} > Joueur inconnu : {nickname}.",))
+                render_reply((tr('{0} > Joueur inconnu : {1}.', owner.handle, nickname),))
             )
             return
         try:
@@ -444,18 +452,16 @@ class PartylineController:
             )
         except (PlayerAdministrationError, ValueError):
             self.runtime.emit_priority(
-                render_reply((f"{owner.handle} > Modification de l'arme refusée.",))
+                render_reply((tr("{0} > Modification de l'arme refusée.", owner.handle),))
             )
             return
         messages = {
-            "rearm": f"{owner.handle} > Arme de {before_player.nickname} restituée.",
+            "rearm": tr('{0} > Arme de {1} restituée.', owner.handle, before_player.nickname),
             "unarm": (
-                f"{owner.handle} > Arme de {before_player.nickname} confisquée "
-                "jusqu'à minuit, heure de Paris."
+                tr("{0} > Arme de {1} confisquée jusqu'à minuit, heure de Paris.", owner.handle, before_player.nickname)
             ),
             "unarm_permanent": (
-                f"{owner.handle} > Arme de {before_player.nickname} confisquée "
-                "de façon permanente."
+                tr('{0} > Arme de {1} confisquée de façon permanente.', owner.handle, before_player.nickname)
             ),
         }
         result = self.runtime.dispatch(
@@ -464,7 +470,7 @@ class PartylineController:
         )
         if result.status.value == "backpressured" or result.transition is None:
             self.runtime.emit_priority(
-                render_reply((f"{owner.handle} > Modification refusée : persistance occupée.",))
+                render_reply((tr('{0} > Modification refusée : persistance occupée.', owner.handle),))
             )
             return
         self._broadcast(
@@ -480,7 +486,7 @@ class PartylineController:
     @staticmethod
     def _is_admin_channel_item_command(text: str) -> bool:
         arguments = text.split()
-        return bool(arguments) and arguments[0].casefold() in ("!appeau", "!pain")
+        return bool(arguments) and arguments[0].casefold() in ("!appeau", tr('!pain'))
 
     @staticmethod
     def _is_duckplanning_command(text: str, *, private: bool) -> bool:
@@ -514,7 +520,7 @@ class PartylineController:
             return
         if len(arguments) != 1:
             usage = "duckplanning" if private else "!duckplanning"
-            lines = (f"{owner.handle} > Usage : {usage}",)
+            lines = (tr('{0} > Usage : {1}', owner.handle, usage),)
         else:
             lines = self._duckplanning_lines(now_ns)
         self.runtime.emit_priority(
@@ -549,7 +555,7 @@ class PartylineController:
             self.runtime.emit_priority(
                 render_wire_notice(
                     message.nickname,
-                    (f"{owner.handle} > Usage : {command}",),
+                    (tr('{0} > Usage : {1}', owner.handle, command),),
                 )
             )
             return
@@ -577,7 +583,7 @@ class PartylineController:
             self.runtime.emit_priority(
                 render_wire_notice(
                     message.nickname,
-                    (f"{owner.handle} > Action administrative refusée.",),
+                    (tr('{0} > Action administrative refusée.', owner.handle),),
                 )
             )
             return
@@ -585,10 +591,7 @@ class PartylineController:
         def render_reply(transition: Transition) -> tuple[bytes, ...]:
             if item_id == 20:
                 message_text = (
-                    f"{owner.handle} > Tu utilises un appeau. "
-                    f"Échéance prévue : {_paris(scheduled_for_ns)} "
-                    "(après le vol actif si nécessaire). "
-                    "Le prochain envol quotidien ne change pas."
+                    tr('{0} > Tu utilises un appeau. Échéance prévue : {1} (après le vol actif si nécessaire). Le prochain envol quotidien ne change pas.', owner.handle, _paris(scheduled_for_ns))
                 )
             else:
                 count = sum(
@@ -598,15 +601,12 @@ class PartylineController:
                     and effect.key == "channel_bread"
                     and effect.owner_key is None
                 )
-                bread = "morceau" if count == 1 else "morceaux"
+                bread = tr('morceau') if count == 1 else tr('morceaux')
                 message_text = (
-                    f"{owner.handle} > Tu déposes un morceau de pain sur {channel}. "
-                    f"Il y a actuellement {count} {bread} de pain. "
-                    + ("Actif 1h, conservé à chaque envol. Attraction renforcée ; "
-                       f"départ des nouveaux canards retardé de {20 * count}s."
+                    tr('{0} > Tu déposes un morceau de pain sur {1}. Il y a actuellement {2} {3} de pain. ', owner.handle, channel, count, bread)
+                    + (tr('Actif 1h, conservé à chaque envol. Attraction renforcée ; départ des nouveaux canards retardé de {0}s.', 20 * count)
                        if transition.state.bread_plan_effect_ids is not None else
-                       "Disponible 1h ; un morceau consommé par envol s’il est encore valide. "
-                       "Le prochain envol quotidien ne change pas.")
+                       tr('Disponible 1h ; un morceau consommé par envol s’il est encore valide. Le prochain envol quotidien ne change pas.'))
                 )
             return render_wire_notice(message.nickname, (message_text,))
 
@@ -615,7 +615,7 @@ class PartylineController:
             self.runtime.emit_priority(
                 render_wire_notice(
                     message.nickname,
-                    (f"{owner.handle} > Action refusée : persistance occupée.",),
+                    (tr('{0} > Action refusée : persistance occupée.', owner.handle),),
                 )
             )
             return
@@ -651,7 +651,7 @@ class PartylineController:
         ):
             self._notice(
                 message.nickname,
-                "Usage : /msg Coin ducklaunch #canal [1] — 1 lance un canard doré.",
+                tr('Usage : /msg Coin ducklaunch #canal [1] — 1 lance un canard doré.'),
             )
             return
         kind = FlightKind.GOLDEN if len(arguments) == 3 else FlightKind.STANDARD
@@ -665,11 +665,11 @@ class PartylineController:
         )
         if result.started:
             assert result.channel is not None and result.flight_id is not None
-            label = "Canard doré" if kind is FlightKind.GOLDEN else "Canard"
-            suffix = f" (vie : {result.health})" if kind is FlightKind.GOLDEN else ""
+            label = tr('Canard doré') if kind is FlightKind.GOLDEN else tr("Canard")
+            suffix = tr(' (vie : {0})', result.health) if kind is FlightKind.GOLDEN else ""
             self._notice(
                 message.nickname,
-                f"{label} #{result.flight_id} lancé sur {result.channel}{suffix}.",
+                tr('{0} #{1} lancé sur {2}{3}.', label, result.flight_id, result.channel, suffix),
             )
             return
         self._notice(
@@ -677,6 +677,7 @@ class PartylineController:
             self._irc_launch_rejection(result, requested_channel),
         )
 
+    @localized_method
     def observe_runtime(self, message: str) -> None:
         """Broadcast privacy-safe runner facts to authenticated operators."""
 
@@ -707,7 +708,7 @@ class PartylineController:
         if self.user_store.has_users():
             self._notice(
                 nickname,
-                "Partyline déjà initialisée. Utilisez /msg Coin reset si le mot de passe doit être remplacé.",
+                tr('Partyline déjà initialisée. Utilisez /msg Coin reset si le mot de passe doit être remplacé.'),
             )
             return
         prefix = message.prefix or nickname
@@ -715,7 +716,7 @@ class PartylineController:
         if account in (None, "*"):
             account = None
         if not self._bootstrap_allowed(prefix, account):
-            self._notice(nickname, "Initialisation partyline refusée pour cette identité IRC.")
+            self._notice(nickname, tr('Initialisation partyline refusée pour cette identité IRC.'))
             self._emit(f"event=bootstrap-refused nick={_safe_atom(nickname)}")
             return
         invite = BootstrapInvite(
@@ -727,13 +728,13 @@ class PartylineController:
         self._bootstrap[rfc1459_casefold(nickname)] = invite
         self._notice(
             nickname,
-            "Hello ! Bootstrap owner armé pour 10 minutes ; aucun mot de passe ne doit être envoyé sur IRC.",
+            tr('Hello ! Bootstrap owner armé pour 10 minutes ; aucun mot de passe ne doit être envoyé sur IRC.'),
         )
         port = self.bound_port
         self._notice(
             nickname,
-            "Ouvrez /ctcp Coin CHAT ou /dcc chat Coin"
-            + (" ; en local : telnet localhost " + str(port) if port else "")
+            tr('Ouvrez /ctcp Coin CHAT ou /dcc chat Coin')
+            + (tr(' ; en local : telnet localhost ') + str(port) if port else "")
             + ".",
         )
         self._emit(f"event=bootstrap-armed nick={_safe_atom(nickname)}")
@@ -765,7 +766,7 @@ class PartylineController:
         if owner is None:
             self._notice(
                 nickname,
-                "Réinitialisation partyline refusée pour cette identité IRC.",
+                tr('Réinitialisation partyline refusée pour cette identité IRC.'),
             )
             self._emit(f"event=password-reset-refused nick={_safe_atom(nickname)}")
             return
@@ -779,13 +780,13 @@ class PartylineController:
         self._bootstrap[rfc1459_casefold(nickname)] = invite
         self._notice(
             nickname,
-            "Réinitialisation armée pour 10 minutes ; aucun mot de passe ne doit être envoyé sur IRC.",
+            tr('Réinitialisation armée pour 10 minutes ; aucun mot de passe ne doit être envoyé sur IRC.'),
         )
         port = self.bound_port
         self._notice(
             nickname,
-            "Ouvrez /ctcp Coin CHAT ou /dcc chat Coin"
-            + (" ; en local : telnet localhost " + str(port) if port else "")
+            tr('Ouvrez /ctcp Coin CHAT ou /dcc chat Coin')
+            + (tr(' ; en local : telnet localhost ') + str(port) if port else "")
             + ".",
         )
         self._emit(
@@ -809,21 +810,21 @@ class PartylineController:
         public_ip = self.configuration.dcc_public_ip
         key = rfc1459_casefold(nickname)
         if public_ip is None:
-            self._notice(nickname, "Offre DCC indisponible : dcc_public_ip n'est pas configurée.")
+            self._notice(nickname, tr("Offre DCC indisponible : dcc_public_ip n'est pas configurée."))
             return
         if key in self._offers:
-            self._notice(nickname, "Une offre DCC CHAT est déjà en attente.")
+            self._notice(nickname, tr('Une offre DCC CHAT est déjà en attente.'))
             return
         if self._pending_dcc_count() >= MAX_PENDING_DCC:
-            self._notice(nickname, "Trop d'offres DCC CHAT sont déjà en attente.")
+            self._notice(nickname, tr("Trop d'offres DCC CHAT sont déjà en attente."))
             return
         if token is not None and not _valid_dcc_token(token):
-            self._notice(nickname, "Jeton DCC passif invalide.")
+            self._notice(nickname, tr('Jeton DCC passif invalide.'))
             return
         try:
             listener = self._dcc_listener()
         except OSError:
-            self._notice(nickname, "Impossible d'ouvrir l'écoute DCC CHAT.")
+            self._notice(nickname, tr("Impossible d'ouvrir l'écoute DCC CHAT."))
             self._emit(f"event=dcc-listen-failed nick={_safe_atom(nickname)}")
             return
         port = int(listener.getsockname()[1])
@@ -864,7 +865,7 @@ class PartylineController:
             same_irc_name(pending.nickname, nickname)
             for pending in self._connects.values()
         ):
-            self._notice(nickname, "Trop de connexions DCC CHAT sont déjà en attente.")
+            self._notice(nickname, tr('Trop de connexions DCC CHAT sont déjà en attente.'))
             return
         stream = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         stream.setblocking(False)
@@ -879,7 +880,7 @@ class PartylineController:
             errno.EINTR,
         ):
             _close_socket(stream)
-            self._notice(nickname, "Connexion DCC CHAT impossible.")
+            self._notice(nickname, tr('Connexion DCC CHAT impossible.'))
             return
         self._connects[stream.fileno()] = PendingDCCConnect(
             stream,
@@ -947,7 +948,7 @@ class PartylineController:
                 error = errno.EIO
             if error:
                 _close_socket(pending.stream)
-                self._notice(pending.nickname, "Connexion DCC CHAT impossible.")
+                self._notice(pending.nickname, tr('Connexion DCC CHAT impossible.'))
             else:
                 self._new_session(
                     pending.stream,
@@ -1453,9 +1454,11 @@ class PartylineController:
         elif command == ".fields" and len(arguments) == 1:
             self._queue_line(
                 session,
-                "Fields: ammo capacity magazines magazine_capacity fatigue level xp "
-                "credit jammed confiscated carried_ducks hits misses wild_shots "
-                "empty_shots jammed_shots compulsive_reloads golden_hits deaths.",
+                tr((
+                    'Fields: ammo capacity magazines magazine_capacity fatigue level xp credit jammed '
+                    'confiscated carried_ducks hits misses wild_shots empty_shots jammed_shots '
+                    'compulsive_reloads golden_hits deaths.'
+                )),
             )
         elif command == ".giveammo" and len(arguments) in (2, 3):
             self._increment_player(session, now_ns, arguments, "ammo")
@@ -1601,11 +1604,11 @@ class PartylineController:
         requested_channel: str,
     ) -> str:
         messages = {
-            "not-connected": "Lancement refusé : Coin n'est pas connecté à IRC.",
-            "not-joined": f"Lancement refusé : Coin n'est pas sur {requested_channel}.",
-            "active-flight": "Lancement refusé : un canard est déjà présent.",
-            "backpressured": "Lancement refusé : la persistance est occupée.",
-            "collision": "Lancement refusé : un canard est déjà présent.",
+            "not-connected": tr("Lancement refusé : Coin n'est pas connecté à IRC."),
+            "not-joined": tr("Lancement refusé : Coin n'est pas sur {0}.", requested_channel),
+            "active-flight": tr('Lancement refusé : un canard est déjà présent.'),
+            "backpressured": tr('Lancement refusé : la persistance est occupée.'),
+            "collision": tr('Lancement refusé : un canard est déjà présent.'),
         }
         return messages[result.status]
 
@@ -1622,7 +1625,7 @@ class PartylineController:
             channel,
             actor="Coin",
             source="spontaneous",
-            announcement=self.configuration.spontaneous_launch_announcement,
+            announcement=tr(self.configuration.spontaneous_launch_announcement),
         )
         if not result.started:
             self._emit(
@@ -1763,12 +1766,12 @@ class PartylineController:
     def _duckplanning_lines(self, now_ns: int) -> tuple[str, ...]:
         state = self.runtime.state
         _, _, _, joined_channels = self._network_status()
-        channel = ",".join(joined_channels) if joined_channels else "aucun canal"
+        channel = ",".join(joined_channels) if joined_channels else tr('aucun canal')
         schedule = state.daily_schedule
         lines: list[str] = []
         daily_next_ns: int | None = None
         if schedule is None:
-            lines.append(f"Duckplanning {channel} — aucun planning quotidien.")
+            lines.append(tr('Duckplanning {0} — aucun planning quotidien.', channel))
         else:
             daily_next_ns = (
                 schedule.day_start_ns + DAY_NS
@@ -1778,8 +1781,8 @@ class PartylineController:
             lines.append(
                 f"Duckplanning {channel} — Europe/Paris — "
                 f"{schedule.next_index}/{len(schedule.deadlines_ns)} "
-                + ("échéances passées du plan actuel." if state.bread_plan_effect_ids is not None
-                   else "créneaux traités.")
+                + (tr('échéances passées du plan actuel.') if state.bread_plan_effect_ids is not None
+                   else tr('créneaux traités.'))
             )
             entries = tuple(
                 f"{index + 1:02d}{'✓' if index < schedule.next_index else '→' if index == schedule.next_index else '·'}"
@@ -1790,7 +1793,7 @@ class PartylineController:
                 first = offset + 1
                 last = min(offset + 6, len(entries))
                 lines.append(
-                    f"Vols {first:02d}-{last:02d}: " + " | ".join(entries[offset:last])
+                    tr('Vols {0:02d}-{1:02d}: ', first, last) + " | ".join(entries[offset:last])
                 )
 
         actions = tuple(
@@ -1802,9 +1805,7 @@ class PartylineController:
         active_breads = active_channel_breads(state, now_ns)
         hourly_bread = state.bread_plan_effect_ids is not None
         if hourly_bread:
-            lines.append(f"Base=24 vols/jour | pains actifs={len(active_breads)} | "
-                         f"attraction : plan à {24 + min(20, len(active_breads))} créneaux "
-                         "(sans garantie d'envol pendant l'heure).")
+            lines.append(tr("Base=24 vols/jour | pains actifs={0} | attraction : plan à {1} créneaux (sans garantie d'envol pendant l'heure).", len(active_breads), 24 + min(20, len(active_breads))))
         if state.flight is not None and now_ns < state.flight.expires_at_ns:
             wake_candidates = tuple(
                 value
@@ -1823,33 +1824,31 @@ class PartylineController:
                                      if e.expires_at_ns is not None)
         wake_ns = min(wake_candidates) if wake_candidates else None
         flight = (
-            "aucun"
+            tr('aucun')
             if state.flight is None
-            else f"#{state.flight.flight_id} fin={_paris(state.flight.expires_at_ns)}"
+            else tr('#{0} fin={1}', state.flight.flight_id, _paris(state.flight.expires_at_ns))
         )
         lines.append(
-            f"Prochain quotidien={_paris(daily_next_ns)} | réveil effectif={_paris(wake_ns)} "
-            f"| vol={flight}."
+            tr('Prochain quotidien={0} | réveil effectif={1} | vol={2}.', _paris(daily_next_ns), _paris(wake_ns), flight)
         )
         lines.append(
-            f"Pains={len(active_breads)} | appeaux/actions={len(actions)} | "
-            + ("aucun pain disponible." if not active_breads else
-               f"pain conservé à chaque envol ; +{20 * len(active_breads)}s aux nouveaux vols."
-               if hourly_bread else "un morceau au plus par envol, uniquement avant son expiration.")
+            tr('Pains={0} | appeaux/actions={1} | ', len(active_breads), len(actions))
+            + (tr('aucun pain disponible.') if not active_breads else
+               tr('pain conservé à chaque envol ; +{0}s aux nouveaux vols.', 20 * len(active_breads))
+               if hourly_bread else tr('un morceau au plus par envol, uniquement avant son expiration.'))
         )
         for action in actions:
             source = state.player(action.source_key or "")
             actor = "Owner" if source is None else source.nickname
-            label = "appeau" if action.item_id == 20 else "canard mécanique"
+            label = tr("appeau") if action.item_id == 20 else tr('canard mécanique')
             lines.append(
-                f"Action #{action.action_id}: {label}, auteur={actor}, "
-                f"échéance={_paris(action.due_at_ns)}."
+                tr('Action #{0}: {1}, auteur={2}, échéance={3}.', action.action_id, label, actor, _paris(action.due_at_ns))
             )
         if active_breads:
             expirations = ", ".join(
                 _paris(effect.expires_at_ns) for effect in active_breads
             )
-            lines.append(f"Expiration des pains: {expirations}.")
+            lines.append(tr('Expiration des pains: {0}.', expirations))
             # Only actual future flight slots/actions can consume bread. A day
             # rollover or the end of an existing flight is not a new takeoff.
             earliest_ns = max(now_ns, state.flight.expires_at_ns) if state.flight else now_ns
@@ -1866,16 +1865,15 @@ class PartylineController:
                               for effect in active_breads)
                 if at_risk:
                     lines.append(
-                        f"Attention : {at_risk}/{len(active_breads)} pain(s) expirent avant "
-                        f"ou à la prochaine échéance d'envol connue ({_paris(next_flight_ns)}). "
-                        + ("L'attraction ne garantit pas un envol avant expiration."
-                           if hourly_bread else "Seul un envol plus tôt pourrait les consommer.")
+                        tr("Attention : {0}/{1} pain(s) expirent avant ou à la prochaine échéance d'envol connue ({2}). ", at_risk, len(active_breads), _paris(next_flight_ns))
+                        + (tr("L'attraction ne garantit pas un envol avant expiration.")
+                           if hourly_bread else tr('Seul un envol plus tôt pourrait les consommer.'))
                     )
             else:
-                lines.append("Aucun prochain envol connu avant recalcul." if hourly_bread else
-                             "Aucun prochain envol connu : consommation du pain non garantie.")
-        lines.append("Légende: ✓ échéance passée du plan actuel (pas un bilan de chasse) | → prochain | · à venir."
-                     if hourly_bread else "Légende: ✓ traité | → prochain quotidien | · à venir.")
+                lines.append(tr('Aucun prochain envol connu avant recalcul.') if hourly_bread else
+                             tr('Aucun prochain envol connu : consommation du pain non garantie.'))
+        lines.append(tr('Légende: ✓ échéance passée du plan actuel (pas un bilan de chasse) | → prochain | · à venir.')
+                     if hourly_bread else tr('Légende: ✓ traité | → prochain quotidien | · à venir.'))
         return tuple(lines)
 
     def _summary_lines(self) -> tuple[str, ...]:
@@ -1887,7 +1885,7 @@ class PartylineController:
             limit=5,
             excluded_nicknames=self._statistics_excluded_nicknames,
         )
-        lines = ["=== Coin · résumé DuckHunt ==="]
+        lines = [tr('=== Coin · résumé DuckHunt ===')]
         lines.extend(_plain_irc(line) for line in render_ranking(
             state,
             limit=5,
@@ -1901,7 +1899,7 @@ class PartylineController:
                 _plain_irc(line)
                 for line in render_inventory(state, player.nickname, channel=channel)
             )
-        lines.append("=== Dernier tireur ===")
+        lines.append(tr('=== Dernier tireur ==='))
         last_shooter = (
             None
             if state.last_shooter_key is None
@@ -1913,7 +1911,7 @@ class PartylineController:
         ):
             last_shooter = None
         if last_shooter is None:
-            lines.append("Aucun tir enregistré.")
+            lines.append(tr('Aucun tir enregistré.'))
         else:
             rank = next(
                 (
@@ -1923,7 +1921,7 @@ class PartylineController:
                 ),
                 None,
             )
-            suffix = "" if rank is None else f" (également #{rank})"
+            suffix = "" if rank is None else tr(' (également #{0})', rank)
             lines.append(f"--- {last_shooter.nickname}{suffix} ---")
             lines.extend(_plain_irc(line) for line in render_profile(state, last_shooter.nickname))
             lines.extend(
@@ -2012,7 +2010,7 @@ class PartylineController:
     ) -> None:
         aliases = {
             "credit": "shop_credit",
-            "fatigue": "fatigue_centi",
+            tr('fatigue'): "fatigue_centi",
             "mags": "magazines",
             "mag_capacity": "magazine_capacity",
             "xp": "experience",
@@ -2148,13 +2146,13 @@ class PartylineController:
             if offer.deadline_ns <= now_ns:
                 _close_socket(offer.listener)
                 self._offers.pop(key, None)
-                self._notice(offer.nickname, "Offre DCC CHAT expirée.")
+                self._notice(offer.nickname, tr('Offre DCC CHAT expirée.'))
                 changed = True
         for descriptor, pending in tuple(self._connects.items()):
             if pending.deadline_ns <= now_ns:
                 _close_socket(pending.stream)
                 self._connects.pop(descriptor, None)
-                self._notice(pending.nickname, "Connexion DCC CHAT expirée.")
+                self._notice(pending.nickname, tr('Connexion DCC CHAT expirée.'))
                 changed = True
         for session in tuple(self._sessions.values()):
             if session.handle is None and session.auth_deadline_ns <= now_ns:
@@ -2345,7 +2343,7 @@ def _utc(value_ns: int | None) -> str:
 
 def _paris(value_ns: int | None) -> str:
     if value_ns is None:
-        return "aucun"
+        return tr('aucun')
     return datetime.fromtimestamp(value_ns / 1_000_000_000, PARIS_ZONE).strftime(
         "%d/%m %H:%M:%S %Z"
     )
@@ -2376,27 +2374,27 @@ def _player_lines(player: PlayerState) -> tuple[str, ...]:
     return (
         f"Player {player.nickname} | level={player.level} xp={player.experience}/{experience_required(player.level)} | hits={player.hits} golden={player.golden_hits} best={best}",
         f"Weapon ammo={player.ammo}/{player.capacity} magazines={player.magazines}/{player.magazine_capacity} confiscated={'permanent' if player.permanently_confiscated else 'yes' if player.confiscated else 'no'} jammed={'yes' if player.jammed else 'no'}",
-        f"Activity misses={player.misses} wild={player.wild_shots} empty={player.empty_shots} fatigue={player.fatigue_centi / 100:.2f}% carried={player.carried_ducks} credit={player.shop_credit}",
+        tr('Activity misses={0} wild={1} empty={2} fatigue={3:.2f}% carried={4} credit={5}', player.misses, player.wild_shots, player.empty_shots, player.fatigue_centi / 100, player.carried_ducks, player.shop_credit),
         f"Inventory: {inventory}",
     )
 
 
 _HELP_LINES = (
-    ".status                         Coin, IRC, persistance et sessions",
-    ".dccstat                        IP, ports, offres et sessions DCC",
-    ".game                           vol, planning et état DuckHunt",
-    ".duckplanning                   les 24 horaires, pains, appeaux et réveil effectif",
-    ".summary                        top 5, profils, inventaires et dernier tireur",
-    ".duck [#canal]                 lance un canard sans déplacer le planning",
-    ".goldenduck [#canal]           lance un canard doré (alias : .golden)",
-    ".who                            opérateurs connectés",
-    ".player <nick>                  profil complet d'un joueur",
-    ".fields                         champs acceptés par .setplayer",
-    ".giveammo <nick> [n]            donne 1 à 100 munitions, sans dépasser la capacité",
-    ".givemag <nick> [n]             donne 1 à 100 chargeurs, sans dépasser la réserve",
-    ".returnweapon <nick>             restitue une arme confisquée",
-    ".passwd                          remplace le mot de passe de la partyline",
-    ".unjam <nick>                    déraie l'arme",
-    ".setplayer <nick> <champ> <v>    modifie un champ borné (liste avec .fields)",
-    ".quit                            ferme la session",
+    tr('.status                         Coin, IRC, persistance et sessions'),
+    tr('.dccstat                        IP, ports, offres et sessions DCC'),
+    tr('.game                           vol, planning et état DuckHunt'),
+    tr('.duckplanning                   les 24 horaires, pains, appeaux et réveil effectif'),
+    tr('.summary                        top 5, profils, inventaires et dernier tireur'),
+    tr('.duck [#canal]                 lance un canard sans déplacer le planning'),
+    tr('.goldenduck [#canal]           lance un canard doré (alias : .golden)'),
+    tr('.who                            opérateurs connectés'),
+    tr(".player <nick>                  profil complet d'un joueur"),
+    tr('.fields                         champs acceptés par .setplayer'),
+    tr('.giveammo <nick> [n]            donne 1 à 100 munitions, sans dépasser la capacité'),
+    tr('.givemag <nick> [n]             donne 1 à 100 chargeurs, sans dépasser la réserve'),
+    tr('.returnweapon <nick>             restitue une arme confisquée'),
+    tr('.passwd                          remplace le mot de passe de la partyline'),
+    tr(".unjam <nick>                    déraie l'arme"),
+    tr('.setplayer <nick> <champ> <v>    modifie un champ borné (liste avec .fields)'),
+    tr('.quit                            ferme la session'),
 )

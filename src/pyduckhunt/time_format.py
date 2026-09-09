@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from pyduckhunt.i18n import current_language, localized
 
+
+@localized
 def format_duration_ms(value_ms: int) -> str:
     """Format measured milliseconds without losing their useful precision."""
 
@@ -12,6 +15,7 @@ def format_duration_ms(value_ms: int) -> str:
     return _format_seconds(total_seconds, fraction)
 
 
+@localized
 def format_duration_ns(value_ns: int) -> str:
     """Format non-negative nanoseconds as seconds, minutes or hours."""
 
@@ -29,8 +33,9 @@ def _require_non_negative_integer(value: int, label: str) -> None:
 def _format_seconds(total_seconds: int, fraction: str) -> str:
     hours, remainder = divmod(total_seconds, 3_600)
     minutes, seconds = divmod(remainder, 60)
+    minute_unit = "mn" if current_language() == "fr" else "m"
     if hours:
-        return f"{hours}h{minutes:02d}mn{seconds:02d}{fraction}s"
+        return f"{hours}h{minutes:02d}{minute_unit}{seconds:02d}{fraction}s"
     if minutes:
-        return f"{minutes}mn{seconds:02d}{fraction}s"
+        return f"{minutes}{minute_unit}{seconds:02d}{fraction}s"
     return f"{seconds}{fraction}s"

@@ -18,6 +18,8 @@ log_directory = "logs"
 # metrics_page_path = "/var/lib/pyduckhunt/metrics/pyduckhunt.prom"
 
 [game]
+# Message language for this instance: fr (default) or en. Same game rules.
+language = "fr"
 enabled = false
 flights_per_day = 24
 golden_weight_per_eighteen = 1

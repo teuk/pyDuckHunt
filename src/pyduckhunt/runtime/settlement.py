@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pyduckhunt.i18n import tr, localized, localized_method
+
 import secrets
 import threading
 from collections.abc import Callable
@@ -84,7 +86,7 @@ class SettlementPolicy:
         if type(self.fatigue_gain_centi) is not int or self.fatigue_gain_centi < 0:
             raise ValueError("fatigue_gain_centi must be a non-negative integer")
         if self.fatigue_gain_centi > 100 * FATIGUE_SCALE:
-            raise ValueError("fatigue gain exceeds the bounded player range")
+            raise ValueError(tr('fatigue gain exceeds the bounded player range'))
         if self.unusual_loot_chance_per_thousand != 0:
             raise ValueError("unusual loot frequency is not calibrated")
 
@@ -170,7 +172,7 @@ class CalibratedEventResolver:
             and item is not None
             and item.grant_kind is not GrantKind.TARGET_EFFECT
         ):
-            raise EventResolutionError("Cet objet n'accepte pas de cible.")
+            raise EventResolutionError(tr("Cet objet n'accepte pas de cible."))
 
         target_present = None
         if target_nickname is not None:
@@ -350,14 +352,14 @@ class CalibratedEventResolver:
         if self._incident_source is None:
             if required:
                 raise EventResolutionError(
-                    "Ce tir exige un règlement d'incident indisponible."
+                    tr("Ce tir exige un règlement d'incident indisponible.")
                 )
             return None
         incident = self._incident_source(state, context, attempt)
         if incident is None:
             if required:
                 raise EventResolutionError(
-                    "Ce tir exige un règlement d'incident indisponible."
+                    tr("Ce tir exige un règlement d'incident indisponible.")
                 )
             return None
         if not isinstance(incident, IncidentAttempt):

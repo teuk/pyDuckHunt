@@ -1,6 +1,8 @@
-"""Render deterministic game facts as concise French IRC responses."""
+"""Render deterministic game facts as localized IRC responses, with byte-compatible French defaults."""
 
 from __future__ import annotations
+
+from pyduckhunt.i18n import tr, localized, localized_method, LocalizedMapping
 
 from collections.abc import Iterable
 
@@ -65,14 +67,14 @@ _COLOR_BLUE = "\x0312"
 _COLOR_GREY = "\x0314"
 _RESET = "\x0f"
 
-_RARITY_PRESENTATION = {
+_RARITY_PRESENTATION = LocalizedMapping({
     LootRarity.UNUSUAL: (_COLOR_GREEN, "item inhabituel"),
     LootRarity.RARE: (_COLOR_BLUE, "item rare"),
     LootRarity.VERY_RARE: (_COLOR_PURPLE, "item très rare"),
     LootRarity.LEGENDARY: (_COLOR_ORANGE, "item légendaire"),
-}
+})
 
-_ITEM_LABELS = {
+_ITEM_LABELS = LocalizedMapping({
     1: "balle supplémentaire",
     2: "chargeur supplémentaire",
     3: "munitions perforantes",
@@ -104,9 +106,9 @@ _ITEM_LABELS = {
     29: "sauf-conduit",
     30: "rechargement automatique",
     31: "rituel de purification",
-}
+})
 
-_LOOT_LABELS = {
+_LOOT_LABELS = LocalizedMapping({
     "junk_item": "un objet mystérieux",
     "single_round": "une balle supplémentaire",
     "reserve_magazine": "un chargeur supplémentaire",
@@ -163,9 +165,9 @@ _LOOT_LABELS = {
     "letter_n": "une lettre N en bois",
     "letter_t": "une lettre T en bois",
     "junk_letter_q": "une lettre Q en bois",
-}
+})
 
-_LOOT_EQUIPMENT_PRESENTATION = {
+_LOOT_EQUIPMENT_PRESENTATION = LocalizedMapping({
     "penetrating_ammunition": (
         "des munitions AP",
         "Les dégâts de ton arme sont doublés pendant 24h.",
@@ -304,11 +306,11 @@ _LOOT_EQUIPMENT_PRESENTATION = {
         "un permis de tuer permanent",
         "Désormais, tu n'encourras plus de pénalités en cas d'accident de chasse.",
     ),
-}
+})
 
 _VARIABLE_LOOT_EQUIPMENT_KEYS = frozenset(("targeting_scope", "lucky_charm"))
 
-_INVENTORY_LABELS = {
+_INVENTORY_LABELS = LocalizedMapping({
     "large_ammo_bag": "grande gibecière",
     "extended_magazine": "chargeur étendu",
     "military_ammo_recycler": "recycl. mun. (10%)",
@@ -316,9 +318,9 @@ _INVENTORY_LABELS = {
     "tearproof_raincoat": "imperméable",
     "military_self_lubricating_system": "syst. autolubrifiant",
     "permanent_killing_license": "permis de tuer",
-}
+})
 
-_LEVEL_TITLES = {
+_LEVEL_TITLES = LocalizedMapping({
     1: "touriste",
     2: "chasseur du dimanche",
     3: "végétarien armé",
@@ -377,9 +379,9 @@ _LEVEL_TITLES = {
     92: "chasseur d'élite de la mort qui tue même en dormant",
     93: "chasseur d'élite de la mort qui tue avant même de tirer",
     94: "chasseur d'élite émérite",
-}
+})
 
-_REWARD_EFFECT_LABELS = {
+_REWARD_EFFECT_LABELS = LocalizedMapping({
     101: "amulette d'abondance",
     102: "amulette d'endurance",
     103: "amulette de bénédiction",
@@ -398,7 +400,7 @@ _REWARD_EFFECT_LABELS = {
     116: "amulette du guerrier",
     117: "amulette du guerrier éternel",
     118: "gibecière TARDIS",
-}
+})
 
 
 def _player(state: GameState, nickname: str) -> PlayerState | None:
@@ -410,15 +412,15 @@ def _player_name(outcome: Outcome) -> str:
         return outcome.actor
     if outcome.player:
         return outcome.player.nickname
-    return "Chasseur"
+    return tr('Chasseur')
 
 
 def _item_label(item_id: int | None) -> str:
     if item_id is None:
-        return "objet"
+        return tr('objet')
     return _ITEM_LABELS.get(
         item_id,
-        _REWARD_EFFECT_LABELS.get(item_id, f"objet {item_id}"),
+        _REWARD_EFFECT_LABELS.get(item_id, tr('objet {0}', item_id)),
     )
 
 
@@ -438,30 +440,29 @@ def _loot_equipment_presentation(outcome: Outcome) -> tuple[str, str] | None:
         if type(magnitude) is not int or not 0 <= magnitude <= 15:
             raise ValueError("targeting-scope loot magnitude is invalid")
         return (
-            "une lunette de visée pour ton arme",
-            f"Lunette pour 6 tirs : +{magnitude} points de précision actuellement.",
+            tr('une lunette de visée pour ton arme'),
+            tr('Lunette pour 6 tirs : +{0} points de précision actuellement.', magnitude),
         )
     if key == "lucky_charm":
         magnitude = outcome.loot_magnitude
         if type(magnitude) is not int or not 1 <= magnitude <= 10:
             raise ValueError("lucky-charm loot magnitude is invalid")
-        point = "point" if magnitude == 1 else "points"
-        extra = "supplémentaire" if magnitude == 1 else "supplémentaires"
+        point = tr('point') if magnitude == 1 else tr('points')
+        extra = tr('supplémentaire') if magnitude == 1 else tr('supplémentaires')
         return (
-            f"un trèfle à 4 feuilles +{magnitude}",
-            f"Chaque canard abattu te rapportera {magnitude} {point} d'xp {extra} "
-            "pendant 24h.",
+            tr('un trèfle à 4 feuilles +{0}', magnitude),
+            tr("Chaque canard abattu te rapportera {0} {1} d'xp {2} pendant 24h.", magnitude, point, extra),
         )
     return _LOOT_EQUIPMENT_PRESENTATION.get(key)
 
 
 def _carry_tag(multiplier: int) -> str:
-    label = {1: "", 2: "encombré", 3: "surchargé"}[multiplier]
+    label = {1: "", 2: tr('encombré'), 3: tr('surchargé')}[multiplier]
     return "" if not label else f" {_COLOR_RED}[{label}]{_RESET}"
 
 
 def _fatigue_tag(penalty_bps: int, excitement_bps: int = 0) -> str:
-    label = "surexcité" if excitement_bps else "fatigué" if penalty_bps else ""
+    label = tr('surexcité') if excitement_bps else tr('fatigué') if penalty_bps else ""
     return f" {_COLOR_RED}[{label}]{_RESET}" if label else ""
 
 
@@ -473,23 +474,23 @@ def _accuracy_text(state: GameState, player: PlayerState) -> str:
         settled_scope_bonus_points=live_scope_bonus_points(state, player),
     )
     text = f"{_basis_points(accuracy.base_bps)}%"
-    labels = {'tonic': 'tonique', 'tremor': 'tremblements', 'glare': 'ébloui',
-              'scope': 'lunette', 'fatigue': 'fatigue', 'overexcitation': 'surexcitation'}
+    labels = {'tonic': tr('tonique'), 'tremor': tr('tremblements'), 'glare': tr('ébloui'),
+              'scope': tr('lunette'), tr('fatigue'): tr('fatigue'), 'overexcitation': tr('surexcitation')}
     for label, delta in accuracy.modifiers:
         sign = '+' if delta >= 0 else '-'
-        text += f" {sign}{_basis_points(abs(delta))} pts {labels[label]}"
+        text += tr(' {0}{1} pts {2}', sign, _basis_points(abs(delta)), labels[label])
     if accuracy.modifiers:
         text += f" = {_basis_points(accuracy.effective_bps)}%"
     return text
 
 
 def _shot_sound(outcome: Outcome) -> str:
-    sound = "BOUM" if outcome.ammunition_item_id == 4 else "BANG"
+    sound = tr('BOUM') if outcome.ammunition_item_id == 4 else "BANG"
     return f"{_BOLD}*{sound}*{_RESET}"
 
 
 def _golden_ammunition_tag(outcome: Outcome) -> str:
-    label = {3: "mun. AP", 4: "mun. expl."}.get(outcome.ammunition_item_id)
+    label = {3: tr('mun. AP'), 4: tr('mun. expl.')}.get(outcome.ammunition_item_id)
     return "" if label is None else f" {_COLOR_GREEN}[{label}]{_RESET}"
 
 
@@ -527,7 +528,7 @@ def _ratio_centi(numerator: int, denominator: int) -> str:
 
 
 def _level_title(level: int) -> str:
-    return _LEVEL_TITLES.get(level, f"chasseur de niveau {level}")
+    return _LEVEL_TITLES.get(level, tr('chasseur de niveau {0}', level))
 
 
 def _letter_status(player: PlayerState) -> str:
@@ -543,12 +544,12 @@ def _effect_status(effect: ActiveEffect, now_ns: int, *, scope_points: int | Non
     if effect.expires_at_ns is not None:
         bounds.append(_duration(effect.expires_at_ns - now_ns))
     if effect.remaining_uses is not None:
-        bounds.append(f"{effect.remaining_uses} util.")
+        bounds.append(tr('{0} util.', effect.remaining_uses))
     if effect.magnitude is not None and not 104 <= effect.item_id <= 111:
         bounds.append(
-            f"+{_fatigue(effect.magnitude)} fatigue"
+            tr('+{0} fatigue', _fatigue(effect.magnitude))
             if effect.item_id == 28
-            else f"+{scope_points} pts précision"
+            else tr('+{0} pts précision', scope_points)
             if effect.item_id == 7 and scope_points is not None
             else f"+{effect.magnitude}"
         )
@@ -581,6 +582,7 @@ def _pack_response_lines(lines: tuple[str, ...], budget: int) -> tuple[str, ...]
     return tuple(packed)
 
 
+@localized
 def render_wire_response(target: str, lines: Iterable[str]) -> tuple[bytes, ...]:
     """Frame the fewest bounded public lines allowed by the IRC byte budget."""
 
@@ -591,6 +593,7 @@ def render_wire_response(target: str, lines: Iterable[str]) -> tuple[bytes, ...]
     return tuple(render_privmsg_bounded(target, line) for line in packed)
 
 
+@localized
 def render_wire_notice(target: str, lines: Iterable[str]) -> tuple[bytes, ...]:
     """Frame the fewest bounded private NOTICE lines allowed by the byte budget."""
 
@@ -601,6 +604,7 @@ def render_wire_notice(target: str, lines: Iterable[str]) -> tuple[bytes, ...]:
     return tuple(render_notice_bounded(target, line) for line in packed)
 
 
+@localized
 def render_detector_notice(outcome: Outcome) -> tuple[str, ...]:
     """Render one player-scoped detector alert for the NOTICE transport."""
 
@@ -608,15 +612,16 @@ def render_detector_notice(outcome: Outcome) -> tuple[str, ...]:
         raise ValueError("detector notice requires a duck-alert outcome")
     if outcome.actor is None:
         return ()
-    return ("Ton détecteur de canards t'avertit : un canard vient de s'envoler.",)
+    return (tr("Ton détecteur de canards t'avertit : un canard vient de s'envoler."),)
 
 
+@localized
 def render_profile(state: GameState, nickname: str) -> tuple[str, ...]:
     """Render the complete two-line hunting sheet shown by ``!duckstats``."""
 
     player = _player(state, nickname)
     if player is None:
-        return (f"{nickname} > Je ne connais aucun chasseur portant ce nom.",)
+        return (tr('{0} > Je ne connais aucun chasseur portant ce nom.', nickname),)
     total_experience = available_experience(player)
     best = "--" if player.best_time_ms is None else format_duration_ms(player.best_time_ms)
     level_target = experience_required(player.level)
@@ -648,43 +653,25 @@ def render_profile(state: GameState, nickname: str) -> tuple[str, ...]:
         )
         + str(reliability_delta_percent)
     )
-    jammed = "oui" if player.jammed else "non"
-    confiscated = "oui" if player.confiscated else "non"
+    jammed = tr('oui') if player.jammed else tr('non')
+    confiscated = tr('oui') if player.confiscated else tr('non')
     return (
-        f"{_COLOR_ORANGE}[Profil]{_RESET} {total_experience} xp | "
-        f"niv. {player.level} ({_level_title(player.level)}) "
-        f"+{level_target - player.experience} xp = niv. sup. | "
-        f"fatigue: {_fatigue(player.fatigue_centi)}{_fatigue_tag(fatigue_penalty_bps(state, player), overexcitation_penalty_bps(state, player))} | "
-        f"karma: {_basis_points(karma)} | "
-        f"rentab.: {_ratio_centi(total_experience, player.hits)} xp/canard | "
-        f"dépensé: {player.experience_spent} xp  "
-        f"{_COLOR_ORANGE}[Stats]{_RESET} "
-        f"préc. théor.: {_accuracy_text(state, player)} | "
-        f"effic. tirs: {_basis_points(effective_accuracy_bps)}% | "
-        f"fiab. arme: {_basis_points(base_reliability_bps)}"
-        f"{reliability_modifier}% | "
-        f"armure: {_basis_points(policy.armor_bps)}% | "
-        f"déflex.: {_basis_points(policy.deflection_bps)}%  "
-        f"{_COLOR_ORANGE}[Arme]{_RESET} "
-        f"enray.: {jammed} ({player.jams} fois) | "
-        f"confisq.: {confiscated} ({player.confiscations} fois)",
-        f"{_COLOR_ORANGE}[Tableau de chasse]{_RESET} "
-        f"meill. tps.: {best} | "
-        f"{player.hits} canards (dont {player.golden_hits} super-canards) | "
-        f"{player.misses} tirs ratés | "
-        f"{player.empty_shots} tirs à vide | "
-        f"{player.jammed_shots} tirs enray. | "
-        f"{player.compulsive_reloads} recharg. compulsifs | "
-        f"{player.wild_shots} tirs sauvages | "
-        f"{player.incidents_caused} accidents | "
-        f"{player.shots_fired} coups tirés  "
-        f"{_COLOR_ORANGE}[Accidents]{_RESET} "
-        f"reçu {player.shots_received} balles perdues dont {player.deaths} mortelles, "
-        f"{player.incidents_deflected} ont ricoché et "
-        f"{player.incidents_absorbed} ont été encaissées.",
+        tr((
+            '{0}[Profil]{1} {2} xp | niv. {3} ({4}) +{5} xp = niv. sup. | fatigue: {6}{7} | karma: '
+            '{8} | rentab.: {9} xp/canard | dépensé: {10} xp  {11}[Stats]{12} préc. théor.: {13} | '
+            'effic. tirs: {14}% | fiab. arme: {15}{16}% | armure: {17}% | déflex.: {18}%  '
+            '{19}[Arme]{20} enray.: {21} ({22} fois) | confisq.: {23} ({24} fois)'
+        ), _COLOR_ORANGE, _RESET, total_experience, player.level, _level_title(player.level), level_target - player.experience, _fatigue(player.fatigue_centi), _fatigue_tag(fatigue_penalty_bps(state, player), overexcitation_penalty_bps(state, player)), _basis_points(karma), _ratio_centi(total_experience, player.hits), player.experience_spent, _COLOR_ORANGE, _RESET, _accuracy_text(state, player), _basis_points(effective_accuracy_bps), _basis_points(base_reliability_bps), reliability_modifier, _basis_points(policy.armor_bps), _basis_points(policy.deflection_bps), _COLOR_ORANGE, _RESET, jammed, player.jams, confiscated, player.confiscations),
+        tr((
+            '{0}[Tableau de chasse]{1} meill. tps.: {2} | {3} canards (dont {4} super-canards) | {5} '
+            'tirs ratés | {6} tirs à vide | {7} tirs enray. | {8} recharg. compulsifs | {9} tirs '
+            'sauvages | {10} accidents | {11} coups tirés  {12}[Accidents]{13} reçu {14} balles '
+            'perdues dont {15} mortelles, {16} ont ricoché et {17} ont été encaissées.'
+        ), _COLOR_ORANGE, _RESET, best, player.hits, player.golden_hits, player.misses, player.empty_shots, player.jammed_shots, player.compulsive_reloads, player.wild_shots, player.incidents_caused, player.shots_fired, _COLOR_ORANGE, _RESET, player.shots_received, player.deaths, player.incidents_deflected, player.incidents_absorbed),
     )
 
 
+@localized
 def render_inventory(
     state: GameState,
     nickname: str,
@@ -701,7 +688,7 @@ def render_inventory(
         raise ValueError("inventory rendering channel is invalid")
     player = _player(state, nickname)
     if player is None:
-        return (f"{nickname} > Je ne connais aucun chasseur portant ce nom.",)
+        return (tr('{0} > Je ne connais aucun chasseur portant ce nom.', nickname),)
     durable_parts = [
         (
             f"{_INVENTORY_LABELS.get(stack.key, stack.key)}"
@@ -727,8 +714,7 @@ def render_inventory(
     excitement = overexcitation_penalty_bps(state, player)
     if fatigue_penalty or excitement:
         inventory_parts.append(
-            f"fatigue: {_fatigue(player.fatigue_centi)}{_fatigue_tag(fatigue_penalty, excitement)} "
-            f"(-{_basis_points(fatigue_penalty + excitement)} pts précision)"
+            tr('fatigue: {0}{1} (-{2} pts précision)', _fatigue(player.fatigue_centi), _fatigue_tag(fatigue_penalty, excitement), _basis_points(fatigue_penalty + excitement))
         )
     inventory_parts.extend(
         _effect_status(effect, state.now_ns, scope_points=live_scope_bonus_points(state, player))
@@ -736,38 +722,38 @@ def render_inventory(
         if effect.item_id != 9
     )
     if player.shop_credit:
-        inventory_parts.append(f"bon d'achat {player.shop_credit} xp")
+        inventory_parts.append(tr("bon d'achat {0} xp", player.shop_credit))
     curses = tuple(curse.key for curse in state.curses if curse.owner_key == player.key)
     breads = active_channel_breads(state, state.now_ns)
     bread_count = len(breads)
     if bread_count:
-        bread_label = "morceau" if bread_count == 1 else "morceaux"
-        channel_label = "le canal" if channel is None else channel
+        bread_label = tr('morceau') if bread_count == 1 else tr('morceaux')
+        channel_label = tr('le canal') if channel is None else channel
         expirations = [effect.expires_at_ns for effect in breads
                        if effect.expires_at_ns is not None]
         expiry = ("" if not expirations else
-                  f" (première expiration dans {format_duration_ns(min(expirations) - state.now_ns)})")
-        effect_hint = (f" ; +{20 * bread_count}s aux nouveaux vols" if state.bread_plan_effect_ids is not None else "")
+                  tr(' (première expiration dans {0})', format_duration_ns(min(expirations) - state.now_ns)))
+        effect_hint = (tr(' ; +{0}s aux nouveaux vols', 20 * bread_count) if state.bread_plan_effect_ids is not None else "")
         inventory_parts.append(
-            f"{bread_count} {bread_label} de pain sur {channel_label}{expiry}{effect_hint}"
+            tr('{0} {1} de pain sur {2}{3}{4}', bread_count, bread_label, channel_label, expiry, effect_hint)
         )
     if curses:
-        inventory_parts.append(f"malédiction: {', '.join(curses)}")
+        inventory_parts.append(tr('malédiction: {0}', ', '.join(curses)))
     weapon_state = (
-        " (confisquée définitivement)"
+        tr(' (confisquée définitivement)')
         if player.permanently_confiscated
-        else " (confisquée)"
+        else tr(' (confisquée)')
         if player.confiscated
-        else " (enrayée)" if player.jammed else ""
+        else tr(' (enrayée)') if player.jammed else ""
     )
-    weapon = level_policy(player.level).weapon_label
+    weapon = tr(level_policy(player.level).weapon_label)
     magazine_status = (
         "∞"
         if has_unlimited_magazines(state, player.key)
         else f"{player.magazines}/{player.magazine_capacity}"
     )
     unlimited_carry = has_unlimited_duck_carry(state, player.key)
-    carry_label = "gibecière TARDIS:" if unlimited_carry else "gibecière:"
+    carry_label = tr('gibecière TARDIS:') if unlimited_carry else tr('gibecière:')
     carry_status = (
         _carry_tag(3)
         if not unlimited_carry and player.carried_ducks > 10
@@ -775,29 +761,26 @@ def render_inventory(
         if not unlimited_carry and player.carried_ducks > 5
         else ""
     )
-    duck_label = "canard" if player.carried_ducks < 2 else "canards"
+    duck_label = tr('canard') if player.carried_ducks < 2 else tr('canards')
     base = (
-        f"{_COLOR_ORANGE}[Inventaire]{_RESET} "
-        f"arme: {weapon}{weapon_state} | "
-        f"mun.: {player.ammo}/{player.capacity} | "
-        f"charg.: {magazine_status} | "
-        f"{carry_label} {player.carried_ducks} {duck_label}{carry_status} | "
-        f"lettres: {_letter_status(player)}"
+        tr('{0}[Inventaire]{1} arme: {2}{3} | mun.: {4}/{5} | charg.: {6} | {7} {8} {9}{10} | lettres: {11}', _COLOR_ORANGE, _RESET, weapon, weapon_state, player.ammo, player.capacity, magazine_status, carry_label, player.carried_ducks, duck_label, carry_status, _letter_status(player))
     )
     if not inventory_parts:
         return (base,)
     return (base, "| " + " | ".join(inventory_parts))
 
 
+@localized
 def render_shop(shop_url: str | None = None) -> tuple[str, ...]:
     """Render an optional operator-controlled catalog link in one safe line."""
 
     normalized = normalize_shop_url(shop_url)
     if normalized is None:
-        return ("Boutique: !shop [id [cible]]",)
-    return (f"Boutique: {normalized} | !shop [id [cible]]",)
+        return (tr('Boutique: !shop [id [cible]]'),)
+    return (tr('Boutique: {0} | !shop [id [cible]]', normalized),)
 
 
+@localized
 def render_ranking(
     state: GameState,
     *,
@@ -816,7 +799,7 @@ def render_ranking(
         excluded_nicknames=excluded_nicknames,
     )
     if not ordered:
-        lines = (f"{_COLOR_ORANGE}[TOP {limit}]{_RESET} Aucun chasseur classé.",)
+        lines = (tr('{0}[TOP {1}]{2} Aucun chasseur classé.', _COLOR_ORANGE, limit, _RESET),)
     else:
         medals = ("🥇", "🥈", "🥉")
         entries = "  •  ".join(
@@ -828,11 +811,12 @@ def render_ranking(
         lines = (f"{_COLOR_ORANGE}[TOP {limit}]{_RESET}  {entries}",)
     if normalized_url is not None:
         lines += (
-            f"{_COLOR_BLUE}[Classement complet]{_RESET} {normalized_url}",
+            tr('{0}[Classement complet]{1} {2}', _COLOR_BLUE, _RESET, normalized_url),
         )
     return lines
 
 
+@localized
 def render_last_flight(
     last_flight: LastFlight | int | None,
     *,
@@ -847,25 +831,26 @@ def render_last_flight(
         elapsed = _duration(now_ns - active_flight.spawned_at_ns)
         remaining = _duration(active_flight.expires_at_ns - now_ns)
         return (
-            f"Un canard est en vol depuis {elapsed}; envol dans {remaining} s'il n'est pas touché.",
+            tr("Un canard est en vol depuis {0}; envol dans {1} s'il n'est pas touché.", elapsed, remaining),
         )
     if last_flight is None:
-        return ("Aucun envol de canard n'a encore été enregistré.",)
+        return (tr("Aucun envol de canard n'a encore été enregistré."),)
     if type(last_flight) is int:
-        return (f"Le dernier canard a été aperçu il y a {_duration(last_flight)}.",)
+        return (tr('Le dernier canard a été aperçu il y a {0}.', _duration(last_flight)),)
     if not isinstance(last_flight, LastFlight) or type(now_ns) is not int or now_ns < last_flight.ended_at_ns:
         raise ValueError("last-flight rendering requires durable facts and current game time")
     ago = _duration(now_ns - last_flight.ended_at_ns)
     duration = _duration(last_flight.ended_at_ns - last_flight.spawned_at_ns)
     if last_flight.conclusion is LastFlightConclusion.HIT:
-        result = f"abattu par {last_flight.actor} en {duration}"
+        result = tr('abattu par {0} en {1}', last_flight.actor, duration)
     elif last_flight.conclusion is LastFlightConclusion.ESCAPED:
-        result = f"envolé sans être touché après {duration}"
+        result = tr('envolé sans être touché après {0}', duration)
     else:
-        result = f"effrayé par un tir après {duration}"
-    return (f"Dernier canard : {result}, il y a {ago}.",)
+        result = tr('effrayé par un tir après {0}', duration)
+    return (tr('Dernier canard : {0}, il y a {1}.', result, ago),)
 
 
+@localized
 def render_query(
     state: GameState,
     actor: str,
@@ -886,7 +871,7 @@ def render_query(
             nickname,
             excluded_nicknames=statistics_excluded_nicknames,
         ):
-            return (f"{nickname} > Je ne connais aucun chasseur portant ce nom.",)
+            return (tr('{0} > Je ne connais aucun chasseur portant ce nom.', nickname),)
         return render_profile(state, nickname)
     if command.kind is CommandKind.INVENTORY:
         return render_inventory(
@@ -914,6 +899,7 @@ def render_query(
     raise ValueError(f"{command_usage(command)} is not a read-only query")
 
 
+@localized
 def render_outcome(
     outcome: Outcome,
     *,
@@ -929,22 +915,21 @@ def render_outcome(
         if flight_appearance is not None:
             prefix = ""
             if outcome.flight_kind is FlightKind.MECHANICAL:
-                prefix = f"{_COLOR_GREY}[CANARD MÉCANIQUE]{_RESET} "
+                prefix = tr('{0}[CANARD MÉCANIQUE]{1} ', _COLOR_GREY, _RESET)
             return (
                 f"{prefix}{_COLOR_GREY}{flight_appearance.trail}{_RESET} "
                 f"{_BOLD}{flight_appearance.silhouette}{_RESET}   "
-                f"{flight_appearance.utterance}",
+                f"{tr(flight_appearance.utterance)}",
             )
         if outcome.flight_kind is FlightKind.MECHANICAL:
-            return (f"{_COLOR_GREY}[CANARD MÉCANIQUE]{_RESET} {_BOLD}\\_O<{_RESET}   CLIC",)
+            return (tr('{0}[CANARD MÉCANIQUE]{1} {2}\\_O<{3}   CLIC', _COLOR_GREY, _RESET, _BOLD, _RESET),)
         return (
-            f"{_COLOR_GREY}·-.,¸¸.-·°'`'°·-.,¸¸.-·°'`'°{_RESET} "
-            f"{_BOLD}\\_O<{_RESET}   COIN",
+            tr("{0}·-.,¸¸.-·°'`'°·-.,¸¸.-·°'`'°{1} {2}\\_O<{3}   COIN", _COLOR_GREY, _RESET, _BOLD, _RESET),
         )
     if outcome.kind is OutcomeKind.FLIGHT_ALREADY_ACTIVE:
         return ()
     if outcome.kind is OutcomeKind.FLIGHT_EXPIRED:
-        return (f"Le canard s'échappe. {_COLOR_GREY}·°'`'°-.,¸¸.·°'`{_RESET}",)
+        return (tr("Le canard s'échappe. {0}·°'`'°-.,¸¸.·°'`{1}", _COLOR_GREY, _RESET),)
     if outcome.kind is OutcomeKind.HIT:
         if channel is not None and (
             type(channel) is not str
@@ -955,12 +940,11 @@ def render_outcome(
         elapsed = "--" if outcome.elapsed_ms is None else format_duration_ms(outcome.elapsed_ms)
         total = "?" if player is None else str(player.hits)
         level = "" if player is None else (
-            f" niv. {player.level} (progression : "
-            f"{player.experience}/{experience_required(player.level)})"
+            tr(' niv. {0} (progression : {1}/{2})', player.level, player.experience, experience_required(player.level))
         )
-        total_label = "canard" if total == "1" else "canards"
-        location = "" if channel is None else f" sur {channel}"
-        recycled = " [munition recyclée]" if outcome.ammunition_recycled else ""
+        total_label = tr('canard') if total == "1" else tr('canards')
+        location = "" if channel is None else tr(' sur {0}', channel)
+        recycled = tr(' [munition recyclée]') if outcome.ammunition_recycled else ""
         carry = _carry_tag(outcome.carry_fatigue_multiplier)
         ammunition = (
             _golden_ammunition_tag(outcome)
@@ -968,90 +952,76 @@ def render_outcome(
             else ""
         )
         target = (
-            f"le {_COLOR_GREEN}[CANARD DORÉ]{_RESET}"
+            tr('le {0}[CANARD DORÉ]{1}', _COLOR_GREEN, _RESET)
             if outcome.flight_kind is FlightKind.GOLDEN
-            else "le canard"
+            else tr('le canard')
         )
         return (
-            f"{actor} > {_shot_sound(outcome)}     Tu as eu {target} en {elapsed}, "
-            f"ce qui te fait un total de {total} {total_label}{location}.     "
-            f"{_BOLD}\\_X<{_RESET}   *COUAC*   "
-            f"{_COLOR_GREEN}[{outcome.experience_awarded} xp]{_RESET}"
-            f"{level}{recycled}{ammunition}{carry}{fatigued}",
+            tr('{0} > {1}     Tu as eu {2} en {3}, ce qui te fait un total de {4} {5}{6}.     {7}\\_X<{8}   *COUAC*   {9}[{10} xp]{11}{12}{13}{14}{15}{16}', actor, _shot_sound(outcome), target, elapsed, total, total_label, location, _BOLD, _RESET, _COLOR_GREEN, outcome.experience_awarded, _RESET, level, recycled, ammunition, carry, fatigued),
         )
     if outcome.kind is OutcomeKind.LOOT_ACQUIRED:
         rarity = _loot_rarity_tag(outcome.loot_key)
         if outcome.letter_collection_completed:
             return (
-                f"{actor} > {_COLOR_GREEN}[DUCK HUNT]{_RESET} Collection complète : "
-                "lot aléatoire, bon de 50 xp et munitions réapprovisionnées."
-                f"{rarity}",
+                tr('{0} > {1}[DUCK HUNT]{2} Collection complète : lot aléatoire, bon de 50 xp et munitions réapprovisionnées.{3}', actor, _COLOR_GREEN, _RESET, rarity),
             )
         if (outcome.loot_key or "").startswith("letter_") and player is not None:
             label = _LOOT_LABELS[outcome.loot_key or ""]
             return (
-                f"{actor} > {_COLOR_GREEN}[Butin]{_RESET} {label} | "
-                f"lettres : {_letter_status(player)}{rarity}",
+                tr('{0} > {1}[Butin]{2} {3} | lettres : {4}{5}', actor, _COLOR_GREEN, _RESET, label, _letter_status(player), rarity),
             )
         equipment = _loot_equipment_presentation(outcome)
         if equipment is not None:
             label, description = equipment
             return (
-                f"{actor} > En fouillant les buissons autour du canard, tu trouves "
-                f"{_COLOR_GREEN}{label}{_RESET}. {description}{rarity}",
+                tr('{0} > En fouillant les buissons autour du canard, tu trouves {1}{2}{3}. {4}{5}', actor, _COLOR_GREEN, label, _RESET, description, rarity),
             )
-        label = _LOOT_LABELS.get(outcome.loot_key or "", "un objet")
+        label = _LOOT_LABELS.get(outcome.loot_key or "", tr('un objet'))
         detail = f" ({outcome.curse_key})" if outcome.curse_key else ""
         return (
-            f"{actor} > En fouillant les buissons autour du canard, tu trouves... "
-            f"{_COLOR_GREEN}{label}{detail}{_RESET}.{rarity}",
+            tr('{0} > En fouillant les buissons autour du canard, tu trouves... {1}{2}{3}{4}.{5}', actor, _COLOR_GREEN, label, detail, _RESET, rarity),
         )
     if outcome.kind is OutcomeKind.CURSE_NEUTRALIZED:
         return (
-            f"{actor} > Ton amulette de bénédiction neutralise la malédiction.",
+            tr('{0} > Ton amulette de bénédiction neutralise la malédiction.', actor),
         )
     if outcome.kind is OutcomeKind.MILESTONE_CREDIT:
         return (
-            f"{actor} > {_COLOR_GREEN}[Palier]{_RESET} Bon d'achat : "
-            f"{outcome.shop_credit_awarded} xp.",
+            tr("{0} > {1}[Palier]{2} Bon d'achat : {3} xp.", actor, _COLOR_GREEN, _RESET, outcome.shop_credit_awarded),
         )
     if outcome.kind is OutcomeKind.REWARD_TRIGGERED:
         if outcome.triggered_item_id == 21:
-            return (f"{actor} > Ton amulette fait apparaître du pain sur le canal.",)
+            return (tr('{0} > Ton amulette fait apparaître du pain sur le canal.', actor),)
         return (
-            f"{actor} > Ton amulette programme un canard mécanique dans 10mn00s.",
+            tr('{0} > Ton amulette programme un canard mécanique dans 10mn00s.', actor),
         )
     if outcome.kind is OutcomeKind.FLIGHT_SURVIVED:
         if outcome.flight_kind is FlightKind.GOLDEN:
             return (
-                f"{actor} > {_shot_sound(outcome)} C'est un "
-                f"{_COLOR_GREEN}[CANARD DORÉ]{_RESET} ! "
-                f"Il a survécu. [vie -{outcome.damage_dealt}]{fatigued}",
+                tr("{0} > {1} C'est un {2}[CANARD DORÉ]{3} ! Il a survécu. [vie -{4}]{5}", actor, _shot_sound(outcome), _COLOR_GREEN, _RESET, outcome.damage_dealt, fatigued),
             )
-        return (f"{actor} > Le canard a survécu. [vie -{outcome.damage_dealt}]{fatigued}",)
+        return (tr('{0} > Le canard a survécu. [vie -{1}]{2}', actor, outcome.damage_dealt, fatigued),)
     if outcome.kind is OutcomeKind.MISS:
-        recycled = " [munition recyclée]" if outcome.ammunition_recycled else ""
-        miss = f"{_COLOR_RED}[raté : -{outcome.miss_penalty} xp]{_RESET}"
+        recycled = tr(' [munition recyclée]') if outcome.ammunition_recycled else ""
+        miss = tr('{0}[raté : -{1} xp]{2}', _COLOR_RED, outcome.miss_penalty, _RESET)
         if outcome.flight_id is None:
-            wild = f"{_COLOR_RED}[tir sauvage : -{outcome.wild_penalty} xp]{_RESET}"
+            wild = tr('{0}[tir sauvage : -{1} xp]{2}', _COLOR_RED, outcome.wild_penalty, _RESET)
             return (
-                f"{actor} > Par chance tu as raté, mais tu visais qui au juste ? "
-                f"Il n'y a aucun canard dans le coin...   {miss} {wild}{recycled}",
+                tr("{0} > Par chance tu as raté, mais tu visais qui au juste ? Il n'y a aucun canard dans le coin...   {1} {2}{3}", actor, miss, wild, recycled),
             )
         return (
-            f"{actor} > Raté. {miss}{recycled}{fatigued}",
+            tr('{0} > Raté. {1}{2}{3}', actor, miss, recycled, fatigued),
         )
     if outcome.kind is OutcomeKind.LATE_SHOT:
         delay = "--" if outcome.late_by_ms is None else format_duration_ms(outcome.late_by_ms)
-        recycled = " [munition recyclée]" if outcome.ammunition_recycled else ""
+        recycled = tr(' [munition recyclée]') if outcome.ammunition_recycled else ""
         return (
-            f"{actor} > C'est raté, tu as tiré {delay} trop tard.   "
-            f"{_COLOR_RED}[raté : -{outcome.miss_penalty} xp]{_RESET}{recycled}",
+            tr("{0} > C'est raté, tu as tiré {1} trop tard.   {2}[raté : -{3} xp]{4}{5}", actor, delay, _COLOR_RED, outcome.miss_penalty, _RESET, recycled),
         )
     if outcome.kind is OutcomeKind.EMPTY:
-        return (f"{actor} > {_COLOR_GREY}*CLIC*{_RESET} CHARGEUR VIDE",)
+        return (tr('{0} > {1}*CLIC*{2} CHARGEUR VIDE', actor, _COLOR_GREY, _RESET),)
     if outcome.kind is OutcomeKind.JAMMED:
-        return (f"{actor} > {_COLOR_GREY}*CLAC*{_RESET} ARME ENRAYÉE",)
+        return (tr('{0} > {1}*CLAC*{2} ARME ENRAYÉE', actor, _COLOR_GREY, _RESET),)
     if outcome.kind is OutcomeKind.RELOADED:
         ammo = "?" if player is None else f"{player.ammo}/{player.capacity}"
         magazines = (
@@ -1061,29 +1031,27 @@ def render_outcome(
             if outcome.unlimited_magazines
             else f"{player.magazines}/{player.magazine_capacity}"
         )
-        automatic = " [rechargement auto.]" if outcome.automatic else ""
+        automatic = tr(' [rechargement auto.]') if outcome.automatic else ""
         return (
-            f"{actor} > {_COLOR_GREY}*CLAC CLAC*{_RESET} Tu recharges. "
-            f"| Mun. : {ammo} | Charg. : {magazines}{automatic}",
+            tr('{0} > {1}*CLAC CLAC*{2} Tu recharges. | Mun. : {3} | Charg. : {4}{5}', actor, _COLOR_GREY, _RESET, ammo, magazines, automatic),
         )
     if outcome.kind is OutcomeKind.UNJAMMED:
-        return (f"{actor} > {_COLOR_GREY}*Crr..CLIC*{_RESET} Tu décoinces ton arme.",)
+        return (tr('{0} > {1}*Crr..CLIC*{2} Tu décoinces ton arme.', actor, _COLOR_GREY, _RESET),)
     if outcome.kind is OutcomeKind.ALREADY_LOADED:
         if player is None:
-            return (f"{actor} > Ton arme n'a pas besoin d'être rechargée.",)
+            return (tr("{0} > Ton arme n'a pas besoin d'être rechargée.", actor),)
         magazines = (
             "∞"
             if outcome.unlimited_magazines
             else f"{player.magazines}/{player.magazine_capacity}"
         )
         return (
-            f"{actor} > Ton arme n'a pas besoin d'être rechargée. "
-            f"| Mun. : {player.ammo}/{player.capacity} | Charg. : {magazines}",
+            tr("{0} > Ton arme n'a pas besoin d'être rechargée. | Mun. : {1}/{2} | Charg. : {3}", actor, player.ammo, player.capacity, magazines),
         )
     if outcome.kind is OutcomeKind.NO_RESERVE:
-        return (f"{actor} > Tu es à court de chargeurs.",)
+        return (tr('{0} > Tu es à court de chargeurs.', actor),)
     if outcome.kind is OutcomeKind.COMMAND_DELAYED:
-        return (f"{actor} > Ton action est retardée de 5s par une malédiction.",)
+        return (tr('{0} > Ton action est retardée de 5s par une malédiction.', actor),)
     if outcome.kind is OutcomeKind.COMMAND_THROTTLED:
         if not outcome.notice_emitted:
             return ()
@@ -1092,20 +1060,20 @@ def render_outcome(
             (outcome.defer_until_ns or 0) - (outcome.due_at_ns or 0),
         )
         return (
-            f"{actor} > Trop de commandes ; réessaie dans {_duration(wait_ns)}.",
+            tr('{0} > Trop de commandes ; réessaie dans {1}.', actor, _duration(wait_ns)),
         )
     if outcome.kind is OutcomeKind.CURSE_BLOCKED:
-        return (f"{actor} > Cette malédiction t'empêche de recharger.",)
+        return (tr("{0} > Cette malédiction t'empêche de recharger.", actor),)
     if outcome.kind is OutcomeKind.TRIGGER_LOCKED:
-        return (f"{actor} > {_COLOR_GREY}*CLIC*{_RESET} Gâchette verrouillée.",)
+        return (tr('{0} > {1}*CLIC*{2} Gâchette verrouillée.', actor, _COLOR_GREY, _RESET),)
     if outcome.kind is OutcomeKind.FLIGHT_FRIGHTENED:
-        return ("Effrayé par tout ce bruit, le canard s'échappe.",)
+        return (tr("Effrayé par tout ce bruit, le canard s'échappe."),)
     if outcome.kind is OutcomeKind.HUNT_BLOCKED:
-        return (f"{actor} > Tu ne peux pas chasser pour le moment.",)
+        return (tr('{0} > Tu ne peux pas chasser pour le moment.', actor),)
     if outcome.kind is OutcomeKind.WEAPON_CONFISCATED:
-        return (f"{actor} > {_COLOR_RED}[ARME CONFISQUÉE]{_RESET}",)
+        return (tr('{0} > {1}[ARME CONFISQUÉE]{2}', actor, _COLOR_RED, _RESET),)
     if outcome.kind is OutcomeKind.SABOTAGE_TRIGGERED:
-        return (f"{actor} > {_BOLD}*BOUM*{_RESET} Ton arme vient d'exploser.",)
+        return (tr("{0} > {1}*BOUM*{2} Ton arme vient d'exploser.", actor, _BOLD, _RESET),)
     if outcome.kind in (
         OutcomeKind.INCIDENT_DEFLECTED,
         OutcomeKind.INCIDENT_ABSORBED,
@@ -1115,99 +1083,90 @@ def render_outcome(
     if outcome.kind is OutcomeKind.SHOP_PURCHASED:
         tags = ""
         if outcome.shop_credit_spent:
-            tags += " [bon d'achat]"
+            tags += tr(" [bon d'achat]")
         if outcome.discount_percent:
-            tags += " [coupon promo.]"
+            tags += tr(' [coupon promo.]')
         if outcome.item_id == 25 and player is not None:
             before = player.fatigue_centi - outcome.fatigue_changed_centi
-            feeling = ("Tu te sens en pleine forme mais un peu surexcité. [surexcité]"
-                       if player.fatigue_centi < 0 else "Tu te sens en pleine forme."
+            feeling = (tr('Tu te sens en pleine forme mais un peu surexcité. [surexcité]')
+                       if player.fatigue_centi < 0 else tr('Tu te sens en pleine forme.')
                        if player.fatigue_centi == 0 else "")
             return (
-                f"{actor} > Tu achètes un thermos de café en échange de "
-                f"{outcome.charged_experience} points d'xp. "
-                f"Fatigue : {_fatigue(before)} → {_fatigue(player.fatigue_centi)}. "
-                f"{feeling}{tags}",
+                tr("{0} > Tu achètes un thermos de café en échange de {1} points d'xp. Fatigue : {2} → {3}. {4}{5}", actor, outcome.charged_experience, _fatigue(before), _fatigue(player.fatigue_centi), feeling, tags),
             )
         if outcome.item_id == 7:
             magnitude = outcome.effect_magnitude
             if type(magnitude) is not int or not 0 <= magnitude <= 15:
                 raise ValueError("targeting-scope purchase magnitude is invalid")
             return (
-                f"{actor} > Tu ajoutes une lunette de visée à ton arme en échange de "
-                f"{outcome.charged_experience} points d'xp. Lunette pour 6 tirs : "
-                f"+{magnitude} points de précision actuellement.{tags}",
+                tr("{0} > Tu ajoutes une lunette de visée à ton arme en échange de {1} points d'xp. Lunette pour 6 tirs : +{2} points de précision actuellement.{3}", actor, outcome.charged_experience, magnitude, tags),
             )
         if outcome.item_id == 10:
             magnitude = outcome.effect_magnitude
             if type(magnitude) is not int or not 1 <= magnitude <= 10:
                 raise ValueError("lucky-charm purchase magnitude is invalid")
-            point = "point" if magnitude == 1 else "points"
-            extra = "supplémentaire" if magnitude == 1 else "supplémentaires"
+            point = tr('point') if magnitude == 1 else tr('points')
+            extra = tr('supplémentaire') if magnitude == 1 else tr('supplémentaires')
             return (
-                f"{actor} > Tu achètes un trèfle à quatre feuilles en échange de "
-                f"{outcome.charged_experience} points d'xp. Ce porte-bonheur te fera "
-                f"gagner {magnitude} {point} d'xp {extra} pour chaque canard abattu "
-                f"pendant 24h.{tags}",
+                tr((
+                    "{0} > Tu achètes un trèfle à quatre feuilles en échange de {1} points d'xp. Ce "
+                    "porte-bonheur te fera gagner {2} {3} d'xp {4} pour chaque canard abattu pendant 24h.{5}"
+                ), actor, outcome.charged_experience, magnitude, point, extra, tags),
             )
         if outcome.item_id == 21:
             count = outcome.channel_effect_count
             if type(count) is not int or count < 1:
                 raise ValueError("bread purchase count is invalid")
-            bread = "morceau" if count == 1 else "morceaux"
-            channel_label = "le canal" if channel is None else channel
+            bread = tr('morceau') if count == 1 else tr('morceaux')
+            channel_label = tr('le canal') if channel is None else channel
             if outcome.effect_magnitude == 20:
                 return (
-                    f"{actor} > Tu achètes un morceau de pain en échange de "
-                    f"{outcome.charged_experience} points d'xp. Pendant 1h, il renforce "
-                    "l'attraction et retarde le départ des nouveaux canards de 20s par morceau. "
-                    "Il reste en place à chaque envol. Karma temporaire : +2,00. "
-                    f"Il y a actuellement {count} {bread} de pain sur {channel_label}.{tags}",
+                    tr((
+                        "{0} > Tu achètes un morceau de pain en échange de {1} points d'xp. Pendant 1h, il "
+                        "renforce l'attraction et retarde le départ des nouveaux canards de 20s par morceau. Il "
+                        'reste en place à chaque envol. Karma temporaire : +2,00. Il y a actuellement {2} {3} de '
+                        'pain sur {4}.{5}'
+                    ), actor, outcome.charged_experience, count, bread, channel_label, tags),
                 )
             return (
-                f"{actor} > Tu achètes un morceau de pain en échange de "
-                f"{outcome.charged_experience} points d'xp. Il reste disponible "
-                "pendant 1h ou jusqu'au prochain envol, qui en consommera un. "
-                "Ton karma temporaire augmente aussi de 2,00. "
-                f"Il y a actuellement {count} {bread} de pain sur {channel_label}."
-                f"{tags}",
+                tr((
+                    "{0} > Tu achètes un morceau de pain en échange de {1} points d'xp. Il reste disponible "
+                    "pendant 1h ou jusqu'au prochain envol, qui en consommera un. Ton karma temporaire "
+                    'augmente aussi de 2,00. Il y a actuellement {2} {3} de pain sur {4}.{5}'
+                ), actor, outcome.charged_experience, count, bread, channel_label, tags),
             )
         if outcome.item_id == 20:
             return (
-                f"{actor} > Tu achètes et utilises un appeau en échange de "
-                f"{outcome.charged_experience} points d'xp, ce qui devrait attirer "
-                f"un canard dans les 10 prochaines minutes.{tags}",
+                tr("{0} > Tu achètes et utilises un appeau en échange de {1} points d'xp, ce qui devrait attirer un canard dans les 10 prochaines minutes.{2}", actor, outcome.charged_experience, tags),
             )
         return (
-            f"{actor} > Achat : {_item_label(outcome.item_id)} "
-            f"[{outcome.charged_experience} xp].{tags}",
+            tr('{0} > Achat : {1} [{2} xp].{3}', actor, _item_label(outcome.item_id), outcome.charged_experience, tags),
         )
     if outcome.kind is OutcomeKind.SHOP_UNKNOWN_ITEM:
-        return (f"{actor} > Cet objet n'existe pas.",)
+        return (tr("{0} > Cet objet n'existe pas.", actor),)
     if outcome.kind is OutcomeKind.SHOP_INSUFFICIENT_EXPERIENCE:
-        return (f"{actor} > Tu n'es pas assez riche pour cet achat.",)
+        return (tr("{0} > Tu n'es pas assez riche pour cet achat.", actor),)
     if outcome.kind is OutcomeKind.SHOP_NOT_APPLICABLE:
         if outcome.item_id == 21:
-            return (f"{actor} > Il y a déjà 20 morceaux de pain sur le canal ; achat refusé sans dépense.",)
-        return (f"{actor} > Cet achat n'est pas utile actuellement.",)
+            return (tr('{0} > Il y a déjà 20 morceaux de pain sur le canal ; achat refusé sans dépense.', actor),)
+        return (tr("{0} > Cet achat n'est pas utile actuellement.", actor),)
     if outcome.kind is OutcomeKind.SHOP_EFFECT_ACTIVE:
-        return (f"{actor} > {_item_label(outcome.item_id)} est déjà actif.",)
+        return (tr('{0} > {1} est déjà actif.', actor, _item_label(outcome.item_id)),)
     if outcome.kind is OutcomeKind.SHOP_TARGET_REQUIRED:
-        return (f"{actor} > Cet achat nécessite une cible.",)
+        return (tr('{0} > Cet achat nécessite une cible.', actor),)
     if outcome.kind is OutcomeKind.SHOP_TARGET_UNKNOWN:
-        return (f"{actor} > Je ne connais aucun chasseur portant ce nom.",)
+        return (tr('{0} > Je ne connais aucun chasseur portant ce nom.', actor),)
     if outcome.kind is OutcomeKind.SHOP_TARGET_ABSENT:
-        return (f"{actor} > {outcome.target or 'Cette cible'} n'est pas là.",)
+        return (tr("{0} > {1} n'est pas là.", actor, outcome.target or tr('Cette cible')),)
     if outcome.kind is OutcomeKind.SHOP_TARGET_UNARMED:
-        return (f"{actor} > {outcome.target or 'Cette cible'} n'a pas d'arme.",)
+        return (tr("{0} > {1} n'a pas d'arme.", actor, outcome.target or tr('Cette cible')),)
     if outcome.kind is OutcomeKind.SHOP_TARGET_IMMUNE:
         return (
-            f"{actor} > L'arme de {outcome.target or 'cette cible'} "
-            "est immunisée contre cette nuisance.",
+            tr("{0} > L'arme de {1} est immunisée contre cette nuisance.", actor, outcome.target or tr('cette cible')),
         )
     if outcome.kind is OutcomeKind.EFFECT_CONSUMED:
         if outcome.item_id == 21:
-            return ("Le canard mange un morceau de pain posé sur le canal.",)
+            return (tr('Le canard mange un morceau de pain posé sur le canal.'),)
         return ()
     if outcome.kind in (
         OutcomeKind.EFFECT_EXPIRED,
@@ -1221,6 +1180,7 @@ def render_outcome(
     raise ValueError(f"unsupported outcome kind: {outcome.kind}")
 
 
+@localized
 def render_outcomes(
     outcomes: Iterable[Outcome],
     *,
@@ -1263,37 +1223,34 @@ def render_outcomes(
         return lines
     retained = lines[: MAX_RESPONSE_LINES - 1]
     omitted = len(lines) - len(retained)
-    return retained + (f"{_COLOR_GREY}[+{omitted} événements]{_RESET}",)
+    return retained + (tr('{0}[+{1} événements]{2}', _COLOR_GREY, omitted, _RESET),)
 
 
 def _render_incident(outcome: Outcome, miss: Outcome | None) -> str:
     actor = _player_name(outcome)
-    target = outcome.target or "une cible"
+    target = outcome.target or tr('une cible')
     if outcome.kind is OutcomeKind.INCIDENT_DEFLECTED:
         defense = "?" if outcome.deflection_bps is None else str(outcome.deflection_bps // 100)
         text = (
-            f"{_BOLD}*PIEWWW*{_RESET}     une balle de {actor} ricoche sur {target} "
-            f"grâce à son modificateur de déflexion de {defense}%."
+            tr('{0}*PIEWWW*{1}     une balle de {2} ricoche sur {3} grâce à son modificateur de déflexion de {4}%.', _BOLD, _RESET, actor, target, defense)
         )
     elif outcome.kind is OutcomeKind.INCIDENT_ABSORBED:
         defense = "?" if outcome.armor_bps is None else str(outcome.armor_bps // 100)
         text = (
-            f"{_BOLD}*PLOC*{_RESET}     l'armure de {target} arrête une balle perdue "
-            f"de {actor} grâce à sa protection de {defense}%."
+            tr("{0}*PLOC*{1}     l'armure de {2} arrête une balle perdue de {3} grâce à sa protection de {4}%.", _BOLD, _RESET, target, actor, defense)
         )
     else:
         text = (
-            f"{_BOLD}*BANG* xO'{_RESET}     {target} vient de se faire descendre "
-            f"accidentellement par {actor}."
+            tr("{0}*BANG* xO'{1}     {2} vient de se faire descendre accidentellement par {3}.", _BOLD, _RESET, target, actor)
         )
     tags: list[str] = []
     if miss is not None:
-        tags.append(f"[raté : -{miss.miss_penalty} xp]")
+        tags.append(tr('[raté : -{0} xp]', miss.miss_penalty))
         if miss.wild_penalty:
-            tags.append(f"[tir sauvage : -{miss.wild_penalty} xp]")
-    tags.append(f"[accident : -{outcome.incident_penalty} xp]")
+            tags.append(tr('[tir sauvage : -{0} xp]', miss.wild_penalty))
+    tags.append(tr('[accident : -{0} xp]', outcome.incident_penalty))
     if outcome.weapon_confiscated:
-        tags.append("[ARME CONFISQUÉE : accident de chasse]")
+        tags.append(tr('[ARME CONFISQUÉE : accident de chasse]'))
     fatigue = "" if miss is None else _fatigue_tag(miss.fatigue_penalty_bps, miss.overexcitation_penalty_bps)
     return f"{text}   {_COLOR_RED}{' '.join(tags)}{_RESET}{fatigue}"
 

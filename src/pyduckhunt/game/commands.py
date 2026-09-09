@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pyduckhunt.i18n import tr, localized, localized_method
+
 from dataclasses import dataclass
 from enum import Enum
 
@@ -50,11 +52,12 @@ _USAGE = {
 }
 
 
+@localized
 def command_usage(command: Command | CommandKind) -> str:
     """Return the stable public syntax for a parsed command."""
 
     kind = command.kind if isinstance(command, Command) else command
-    return _USAGE[kind]
+    return tr(_USAGE[kind])
 
 
 def validate_command(command: Command, *, maximum_rank_limit: int = 20) -> Command:
@@ -82,7 +85,7 @@ def validate_command(command: Command, *, maximum_rank_limit: int = 20) -> Comma
         valid = False
 
     if not valid:
-        raise CommandSyntaxError(f"syntaxe : {command_usage(command)}")
+        raise CommandSyntaxError(tr('syntaxe : {0}', command_usage(command)))
     return command
 
 

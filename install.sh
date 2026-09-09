@@ -16,21 +16,30 @@ fail() {
 
 usage() {
   cat <<'EOF'
-Usage: ./install.sh [--check]
+Usage: ./install.sh [--check] [--language fr|en]
 
 Without arguments, install the pyDuckHunt beta into the project-local .venv.
 --check validates prerequisites and filesystem boundaries without changing them.
+--language chooses the message language for a new configuration (default: fr).
+An existing configuration is preserved; a conflicting language choice is refused.
 EOF
 }
 
 mode='install'
-case "${1:-}" in
-  '') ;;
-  --check) mode='check' ;;
-  -h|--help) usage; exit 0 ;;
-  *) usage >&2; fail "unsupported argument: $1" ;;
-esac
-[[ $# -le 1 ]] || fail 'only one argument is accepted'
+language='fr'
+language_explicit='false'
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --check) mode='check'; shift ;;
+    --language)
+      [[ $# -ge 2 ]] || fail '--language requires fr or en'
+      [[ "$language_explicit" == false ]] || fail '--language may only be supplied once'
+      language="$2"; language_explicit='true'; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; fail "unsupported argument: $1" ;;
+  esac
+done
+[[ "$language" == fr || "$language" == en ]] || fail 'language must be fr or en'
 
 command -v "$python_command" >/dev/null || fail "Python command not found: $python_command"
 command -v install >/dev/null || fail 'install command not found'
@@ -55,6 +64,23 @@ if [[ -e "$configuration" ]]; then
     || fail 'existing configuration must be one regular file'
 fi
 
+# Resolve the requested language before any installation side effect.
+"$python_command" - "$configuration" "$language" "$language_explicit" <<'PYLANG'
+import sys
+import tomllib
+from pathlib import Path
+path, requested, explicit = Path(sys.argv[1]), sys.argv[2], sys.argv[3] == 'true'
+try:
+    existing = tomllib.loads(path.read_text(encoding='utf-8')).get('game', {}).get('language', 'fr') if path.exists() else requested
+except (OSError, ValueError):
+    raise SystemExit('[KO] Existing configuration cannot be read safely.')
+if existing not in ('fr', 'en'):
+    raise SystemExit('[KO] Existing game.language must be fr or en.')
+if path.exists() and explicit and requested != existing:
+    raise SystemExit('[KO] Existing language differs; update game.language explicitly in your private configuration first.')
+print('LANGUAGE=' + existing)
+PYLANG
+
 if [[ "$mode" == check ]]; then
   printf 'ENVIRONMENT=%s\n' "$([[ -d "$environment" ]] && printf present || printf absent)"
   printf 'CONFIGURATION=%s\n' "$([[ -f "$configuration" ]] && printf preserved || printf absent)"
@@ -78,7 +104,20 @@ fi
   --editable "$project_root"
 
 if [[ ! -e "$configuration" ]]; then
-  install -m 0600 -- "$sample" "$configuration"
+  "$python_command" - "$sample" "$configuration" "$language" <<'PYLANG'
+import os
+import sys
+from pathlib import Path
+sample, target, language = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+text = sample.read_text(encoding='utf-8')
+if language == 'en':
+    text = text.replace('language = "fr"', 'language = "en"', 1)
+    text = text.replace('spontaneous_launch_announcement = "allez, je lance un canard"',
+                        'spontaneous_launch_announcement = "all right, here comes a duck"', 1)
+fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+    handle.write(text)
+PYLANG
   configuration_state='created-disabled'
 else
   configuration_state='preserved'

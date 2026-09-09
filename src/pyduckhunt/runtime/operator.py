@@ -237,6 +237,7 @@ def run_operator_pilot(
             if plan.configuration.runtime.ranking_page_path is None
             else RankingPagePublisher(
                 plan.configuration.runtime.ranking_page_path,
+                language=plan.configuration.game.language,
                 excluded_nicknames=(
                     plan.configuration.game.statistics_excluded_nicknames
                 ),
@@ -281,6 +282,7 @@ def run_operator_pilot(
                 plan.configuration.irc.channels,
                 CalibratedScheduleSource(selected_integers),
                 anti_cheat=plan.configuration.game.anti_cheat,
+                language=plan.configuration.game.language,
                 flight_appearance_source=(
                     RandomizedFlightAppearanceSource(selected_integers)
                     if plan.configuration.game.anti_cheat

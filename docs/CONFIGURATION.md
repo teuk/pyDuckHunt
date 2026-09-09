@@ -23,6 +23,10 @@ generates a standalone ranking from recovered and newly durable state; omission
 keeps public export disabled. See `RANKING_PAGE.md` for the publication boundary.
 The metrics path receives only aggregate, bounded-cardinality observations; its
 omission disables Prometheus export. See `METRICS_GRAFANA.md`.
+The optional `[game]` field `language` accepts exactly `"fr"` or `"en"` and
+defaults to `"fr"`. It controls instance messages, including private Owner
+planning and generated ranking content. Restart the affected instance after
+changing its private language setting. See `LANGUAGES.md`.
 Game configuration keeps the
 fixed 24-flight schedule, one-in-eighteen golden weight, five-minute
 flight lifetime and disabled unusual-loot boundary exact. Its optional

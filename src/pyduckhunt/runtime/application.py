@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pyduckhunt.i18n import validate_language, tr, localized, localized_method
+
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -104,6 +106,7 @@ class IRCGameBridge:
         event_resolver: EventResolver,
         *,
         last_flight_provider: LastFlightProvider | None = None,
+        language: str = "fr",
         shop_url: str | None = None,
         ranking_url: str | None = None,
         statistics_excluded_nicknames: tuple[str, ...] = (),
@@ -130,6 +133,7 @@ class IRCGameBridge:
             raise ValueError("last-flight provider must be callable")
         normalized_shop_url = normalize_shop_url(shop_url)
         normalized_ranking_url = normalize_ranking_url(ranking_url)
+        self.language = validate_language(language)
         self.runtime = runtime
         self.channels = channels
         self._canonical_channels = frozenset(canonical)
@@ -141,6 +145,7 @@ class IRCGameBridge:
         self._last_now_ns: int | None = None
         self._owner_thread = threading.get_ident()
 
+    @localized_method
     def handle(self, now_ns: int, message: IRCMessage) -> BridgeResult:
         """Handle one ready transport message without reading clocks or entropy."""
 
@@ -204,7 +209,7 @@ class IRCGameBridge:
                 elapsed = self._last_flight_provider(transition.state, now_ns)
                 if elapsed is not None and (type(elapsed) is not int or elapsed < 0):
                     raise ValueError(
-                        "last-flight provider must return non-negative integer or None"
+                        tr('last-flight provider must return non-negative integer or None')
                     )
             lines = _render_transition(
                 transition,
@@ -220,7 +225,7 @@ class IRCGameBridge:
             command,
             nickname,
             channel,
-            (f"{nickname} > Service occupé ; réessaie dans un instant.",),
+            (tr('{0} > Service occupé ; réessaie dans un instant.', nickname),),
         )
         dispatch = self.runtime.dispatch(
             event,
@@ -340,4 +345,4 @@ def _render_transition(
         return lines
     retained = lines[: MAX_RESPONSE_LINES - 1]
     omitted = len(lines) - len(retained)
-    return retained + (f"\x0314[+{omitted} événements]\x0f",)
+    return retained + (tr('\x0314[+{0} événements]\x0f', omitted),)

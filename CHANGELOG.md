@@ -5,6 +5,19 @@ these changes do not create a stable release or a tag.
 
 ## Unreleased
 
+### French and English messages
+
+- Add a complete English presentation catalogue, using the supplied Tcl 2.11
+  vocabulary and covering current pyDuckHunt additions. French remains default.
+- Add optional `game.language` (`fr`/`en`) and `install.sh --language en` for
+  a new disabled private configuration; preserve existing installations.
+- Put the English installation command at the top of a concise README and
+  document the complete configure/check/start sequence, including plain IRC.
+- Scope translations to each instance, including scheduled flights, private
+  Owner planning, automatic partyline updates and background ranking export.
+- Keep commands, game rules, entropy draws, event records and state unchanged.
+  English pilots can run the same checkout with separate configuration and state.
+
 ### Scheduling and channel items
 
 - Fix the daily base at 24 flights regardless of activity, retaining replay of

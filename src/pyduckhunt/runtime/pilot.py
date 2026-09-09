@@ -152,6 +152,7 @@ def build_development_pilot(
             event_resolver,
             last_flight_provider=last_flight_provider,
             shop_url=configuration.game.shop_url,
+            language=configuration.game.language,
             ranking_url=configuration.game.ranking_url,
             statistics_excluded_nicknames=(
                 configuration.game.statistics_excluded_nicknames
@@ -175,6 +176,7 @@ def build_development_pilot(
                     configuration.game.flight_lifetime_seconds * 1_000_000_000
                 ),
                 anti_cheat=configuration.game.anti_cheat,
+                language=configuration.game.language,
                 integer_source=partyline_integer_source,
                 ranking_url=configuration.game.ranking_url,
                 statistics_excluded_nicknames=(
