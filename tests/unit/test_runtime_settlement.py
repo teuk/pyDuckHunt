@@ -22,7 +22,6 @@ from pyduckhunt.persistence.replay import apply_replay_event
 from pyduckhunt.runtime import (
     CalibratedEventResolver,
     EventResolutionError,
-    HISTORICAL_NOISY_MISS_ESCAPE_BPS,
     IRCCommandContext,
     SettlementPolicy,
     SystemIntegerSource,
@@ -75,7 +74,6 @@ class RuntimeSettlementTests(unittest.TestCase):
             *(1_000 for _ in range(6)),
             1,
             *(1_000 for _ in range(11)),
-            9,
         )
         resolver = CalibratedEventResolver(entropy, lambda channel, nickname: True)
         state = start_flight(
@@ -89,7 +87,7 @@ class RuntimeSettlementTests(unittest.TestCase):
         self.assertEqual(event.shot_attempt.accuracy_roll, 1)
         self.assertEqual(event.shot_attempt.jam_roll, 10_000)
         self.assertEqual(event.shot_attempt.loot.key, "targeting_scope")
-        self.assertEqual(event.shot_attempt.loot.magnitude, 9)
+        self.assertEqual(event.shot_attempt.loot.magnitude, 15)
         self.assertEqual(entropy.values, [])
 
     def test_killing_hit_immediately_improves_the_same_bush_search(self) -> None:
@@ -176,48 +174,22 @@ class RuntimeSettlementTests(unittest.TestCase):
         self.assertFalse(event.shot_attempt.frighten_on_miss)
         self.assertEqual(entropy.calls, [(1, 10_000), (1, 10_000)])
 
-    def test_noisy_active_miss_uses_the_historical_five_percent_boundary(self) -> None:
+    def test_live_noise_is_counted_without_a_random_escape_draw(self) -> None:
         state = start_flight(GameState(), 0, lifetime_ns=100).state
-        frightened_entropy = SequenceSource(
-            10_000,
-            10_000,
-            HISTORICAL_NOISY_MISS_ESCAPE_BPS,
-        )
-        frightened = CalibratedEventResolver(
-            frightened_entropy,
-            lambda channel, nickname: True,
-        )(state, context(CommandKind.SHOT, "bang"))
-        assert frightened.shot_attempt is not None
-        self.assertTrue(frightened.shot_attempt.frighten_on_miss)
-        self.assertEqual(
-            tuple(
-                outcome.kind
-                for outcome in apply_replay_event(state, frightened).outcomes
-            ),
-            (OutcomeKind.MISS, OutcomeKind.FLIGHT_FRIGHTENED),
-        )
-        self.assertEqual(
-            frightened_entropy.calls,
-            [(1, 10_000), (1, 10_000), (1, 10_000)],
-        )
-
-        retained_entropy = SequenceSource(
-            10_000,
-            10_000,
-            HISTORICAL_NOISY_MISS_ESCAPE_BPS + 1,
-        )
-        retained = CalibratedEventResolver(
-            retained_entropy,
-            lambda channel, nickname: True,
-        )(state, context(CommandKind.SHOT, "bang"))
-        assert retained.shot_attempt is not None
-        self.assertFalse(retained.shot_attempt.frighten_on_miss)
-        retained_result = apply_replay_event(state, retained)
-        self.assertEqual(
-            tuple(outcome.kind for outcome in retained_result.outcomes),
-            (OutcomeKind.MISS,),
-        )
-        self.assertIsNotNone(retained_result.state.flight)
+        for count in (1, 2, 3):
+            entropy = SequenceSource(10_000, 10_000)
+            event = CalibratedEventResolver(entropy, lambda channel, nickname: True)(
+                state, context(CommandKind.SHOT, "bang", now_ns=count))
+            self.assertEqual(event.shot_attempt.noisy_miss_limit, 3)
+            self.assertFalse(event.shot_attempt.frighten_on_miss)
+            self.assertEqual(entropy.calls, [(1, 10_000), (1, 10_000)])
+            result = apply_replay_event(state, event)
+            state = result.state
+            if count < 3:
+                self.assertEqual(state.flight.noisy_misses, count)
+            else:
+                self.assertIsNone(state.flight)
+                self.assertIn(OutcomeKind.FLIGHT_FRIGHTENED, [o.kind for o in result.outcomes])
 
     def test_noise_draw_is_skipped_for_hits_and_silent_misses(self) -> None:
         resistant = start_flight(
@@ -272,12 +244,13 @@ class RuntimeSettlementTests(unittest.TestCase):
         self.assertEqual(event.shot_attempt.base_jam_bps, 991)
 
     def test_purchase_settles_price_magnitude_deadline_and_fatigue(self) -> None:
-        scope_entropy = SequenceSource(12)
+        scope_entropy = SequenceSource()
         scope = CalibratedEventResolver(
             scope_entropy,
             lambda channel, nickname: True,
         )(GameState(), context(CommandKind.SHOP, "shop", "7"))
-        self.assertEqual((scope.charged_cost, scope.magnitude), (5, 12))
+        self.assertEqual((scope.charged_cost, scope.magnitude), (5, 15))
+        self.assertEqual(scope_entropy.calls, [])
         self.assertFalse(scope.replace_active_effect)
 
         charm = CalibratedEventResolver(
@@ -297,12 +270,13 @@ class RuntimeSettlementTests(unittest.TestCase):
         )
         self.assertEqual(call.scheduled_for_ns, 300)
 
-        thermos_entropy = SequenceSource(644)
+        thermos_entropy = SequenceSource()
         thermos = CalibratedEventResolver(
             thermos_entropy,
             lambda channel, nickname: True,
         )(GameState(), context(CommandKind.SHOP, "shop", "25"))
-        self.assertEqual(thermos.fatigue_target_centi, 644)
+        self.assertEqual(thermos.fatigue_target_centi, -300)
+        self.assertEqual(thermos_entropy.calls, [])
 
     def test_target_presence_and_fatigue_are_settled_from_injected_state(self) -> None:
         state = GameState(

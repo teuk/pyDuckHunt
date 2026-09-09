@@ -58,7 +58,7 @@ log_directory = "{log_directory}"
 
 [game]
 enabled = {str(enabled).lower()}
-flights_per_day = 18
+flights_per_day = 24
 golden_weight_per_eighteen = 1
 flight_lifetime_seconds = 300
 unusual_loot_chance_per_thousand = 0
@@ -198,10 +198,10 @@ class OperatorLauncherTests(unittest.TestCase):
             root = Path(temporary)
             config_path = root / "pilot.toml"
             ranking_directory = root / "public"
-            ranking_directory.mkdir()
+            ranking_directory.mkdir(mode=0o750)
             ranking_path = ranking_directory / "player-rankings.html"
             metrics_directory = root / "metrics"
-            metrics_directory.mkdir()
+            metrics_directory.mkdir(mode=0o750)
             metrics_path = metrics_directory / "pyduckhunt.prom"
             write_configuration(
                 config_path,
@@ -269,7 +269,7 @@ class OperatorLauncherTests(unittest.TestCase):
             self.assertEqual(result.process.state, ProcessShellState.STOPPED)
             self.assertTrue(result.telemetry.ready_observed)
             self.assertEqual(result.telemetry.ready_entries, 1)
-            self.assertEqual(result.telemetry.schedule_accepted, 1)
+            self.assertEqual(result.telemetry.schedule_accepted, 2)
             self.assertEqual(result.telemetry.network_failures, 0)
             self.assertEqual(os.stat(result.log_path).st_mode & 0o777, 0o644)
             self.assertEqual(os.stat(result.application_log_path).st_mode & 0o777, 0o644)

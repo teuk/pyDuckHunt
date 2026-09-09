@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from pyduckhunt.game.bread import active_channel_breads
+from pyduckhunt.game.accuracy import fatigue_penalty_bps, overexcitation_penalty_bps, shot_accuracy, live_scope_bonus_points
 from pyduckhunt.game.catalog import SHOP_CATALOG, shop_item
 from pyduckhunt.game.commands import (
     Command,
@@ -35,7 +37,7 @@ from pyduckhunt.game.model import (
     PlayerState,
 )
 from pyduckhunt.game.progression import available_experience, experience_required
-from pyduckhunt.game.ranking import ranked_players
+from pyduckhunt.game.ranking import is_statistically_excluded, ranked_players
 from pyduckhunt.game.rewards import (
     has_unlimited_duck_carry,
     has_unlimited_magazines,
@@ -433,11 +435,11 @@ def _loot_equipment_presentation(outcome: Outcome) -> tuple[str, str] | None:
     key = outcome.loot_key or ""
     if key == "targeting_scope":
         magnitude = outcome.loot_magnitude
-        if type(magnitude) is not int or not 1 <= magnitude <= 15:
+        if type(magnitude) is not int or not 0 <= magnitude <= 15:
             raise ValueError("targeting-scope loot magnitude is invalid")
         return (
             "une lunette de visée pour ton arme",
-            f"La précision de tes 6 prochains tirs augmente de {magnitude}%.",
+            f"Lunette pour 6 tirs : +{magnitude} points de précision actuellement.",
         )
     if key == "lucky_charm":
         magnitude = outcome.loot_magnitude
@@ -458,6 +460,39 @@ def _carry_tag(multiplier: int) -> str:
     return "" if not label else f" {_COLOR_RED}[{label}]{_RESET}"
 
 
+def _fatigue_tag(penalty_bps: int, excitement_bps: int = 0) -> str:
+    label = "surexcité" if excitement_bps else "fatigué" if penalty_bps else ""
+    return f" {_COLOR_RED}[{label}]{_RESET}" if label else ""
+
+
+def _accuracy_text(state: GameState, player: PlayerState) -> str:
+    accuracy = shot_accuracy(
+        state, player, level_policy(player.level).accuracy_bps,
+        settled_fatigue_penalty_bps=fatigue_penalty_bps(state, player),
+        settled_overexcitation_penalty_bps=overexcitation_penalty_bps(state, player),
+        settled_scope_bonus_points=live_scope_bonus_points(state, player),
+    )
+    text = f"{_basis_points(accuracy.base_bps)}%"
+    labels = {'tonic': 'tonique', 'tremor': 'tremblements', 'glare': 'ébloui',
+              'scope': 'lunette', 'fatigue': 'fatigue', 'overexcitation': 'surexcitation'}
+    for label, delta in accuracy.modifiers:
+        sign = '+' if delta >= 0 else '-'
+        text += f" {sign}{_basis_points(abs(delta))} pts {labels[label]}"
+    if accuracy.modifiers:
+        text += f" = {_basis_points(accuracy.effective_bps)}%"
+    return text
+
+
+def _shot_sound(outcome: Outcome) -> str:
+    sound = "BOUM" if outcome.ammunition_item_id == 4 else "BANG"
+    return f"{_BOLD}*{sound}*{_RESET}"
+
+
+def _golden_ammunition_tag(outcome: Outcome) -> str:
+    label = {3: "mun. AP", 4: "mun. expl."}.get(outcome.ammunition_item_id)
+    return "" if label is None else f" {_COLOR_GREEN}[{label}]{_RESET}"
+
+
 def _duration(elapsed_ns: int) -> str:
     return format_duration_ns(elapsed_ns)
 
@@ -465,10 +500,11 @@ def _duration(elapsed_ns: int) -> str:
 def _fatigue(value_centi: int) -> str:
     """Format fixed-point fatigue without binary floating-point arithmetic."""
 
-    whole, fraction = divmod(value_centi, FATIGUE_SCALE)
+    sign = "-" if value_centi < 0 else ""
+    whole, fraction = divmod(abs(value_centi), FATIGUE_SCALE)
     if fraction == 0:
-        return str(whole)
-    return f"{whole}.{fraction:02d}".rstrip("0")
+        return f"{sign}{whole}"
+    return f"{sign}{whole}.{fraction:02d}".rstrip("0")
 
 
 def _basis_points(value: int) -> str:
@@ -502,7 +538,7 @@ def _letter_status(player: PlayerState) -> str:
     return " ".join(letters[:4]) + "   " + " ".join(letters[4:])
 
 
-def _effect_status(effect: ActiveEffect, now_ns: int) -> str:
+def _effect_status(effect: ActiveEffect, now_ns: int, *, scope_points: int | None = None) -> str:
     bounds: list[str] = []
     if effect.expires_at_ns is not None:
         bounds.append(_duration(effect.expires_at_ns - now_ns))
@@ -512,6 +548,8 @@ def _effect_status(effect: ActiveEffect, now_ns: int) -> str:
         bounds.append(
             f"+{_fatigue(effect.magnitude)} fatigue"
             if effect.item_id == 28
+            else f"+{scope_points} pts précision"
+            if effect.item_id == 7 and scope_points is not None
             else f"+{effect.magnitude}"
         )
     label = _item_label(effect.item_id)
@@ -616,12 +654,12 @@ def render_profile(state: GameState, nickname: str) -> tuple[str, ...]:
         f"{_COLOR_ORANGE}[Profil]{_RESET} {total_experience} xp | "
         f"niv. {player.level} ({_level_title(player.level)}) "
         f"+{level_target - player.experience} xp = niv. sup. | "
-        f"fatigue: {_fatigue(player.fatigue_centi)} | "
+        f"fatigue: {_fatigue(player.fatigue_centi)}{_fatigue_tag(fatigue_penalty_bps(state, player), overexcitation_penalty_bps(state, player))} | "
         f"karma: {_basis_points(karma)} | "
         f"rentab.: {_ratio_centi(total_experience, player.hits)} xp/canard | "
         f"dépensé: {player.experience_spent} xp  "
         f"{_COLOR_ORANGE}[Stats]{_RESET} "
-        f"préc. théor.: {_basis_points(policy.accuracy_bps)}% | "
+        f"préc. théor.: {_accuracy_text(state, player)} | "
         f"effic. tirs: {_basis_points(effective_accuracy_bps)}% | "
         f"fiab. arme: {_basis_points(base_reliability_bps)}"
         f"{reliability_modifier}% | "
@@ -685,31 +723,33 @@ def render_inventory(
         [] if suppressor is None else [_effect_status(suppressor, state.now_ns)]
     )
     inventory_parts.extend(durable_parts)
+    fatigue_penalty = fatigue_penalty_bps(state, player)
+    excitement = overexcitation_penalty_bps(state, player)
+    if fatigue_penalty or excitement:
+        inventory_parts.append(
+            f"fatigue: {_fatigue(player.fatigue_centi)}{_fatigue_tag(fatigue_penalty, excitement)} "
+            f"(-{_basis_points(fatigue_penalty + excitement)} pts précision)"
+        )
     inventory_parts.extend(
-        _effect_status(effect, state.now_ns)
+        _effect_status(effect, state.now_ns, scope_points=live_scope_bonus_points(state, player))
         for effect in effects
         if effect.item_id != 9
     )
     if player.shop_credit:
         inventory_parts.append(f"bon d'achat {player.shop_credit} xp")
     curses = tuple(curse.key for curse in state.curses if curse.owner_key == player.key)
-    bread_count = sum(
-        1
-        for effect in state.effects
-        if effect.item_id == 21
-        and effect.key == "channel_bread"
-        and effect.owner_key is None
-        and effect.activated_at_ns <= state.now_ns
-        and (
-            effect.expires_at_ns is None
-            or state.now_ns < effect.expires_at_ns
-        )
-    )
+    breads = active_channel_breads(state, state.now_ns)
+    bread_count = len(breads)
     if bread_count:
         bread_label = "morceau" if bread_count == 1 else "morceaux"
         channel_label = "le canal" if channel is None else channel
+        expirations = [effect.expires_at_ns for effect in breads
+                       if effect.expires_at_ns is not None]
+        expiry = ("" if not expirations else
+                  f" (première expiration dans {format_duration_ns(min(expirations) - state.now_ns)})")
+        effect_hint = (f" ; +{20 * bread_count}s aux nouveaux vols" if state.bread_plan_effect_ids is not None else "")
         inventory_parts.append(
-            f"{bread_count} {bread_label} de pain sur {channel_label}"
+            f"{bread_count} {bread_label} de pain sur {channel_label}{expiry}{effect_hint}"
         )
     if curses:
         inventory_parts.append(f"malédiction: {', '.join(curses)}")
@@ -763,13 +803,18 @@ def render_ranking(
     *,
     limit: int = 5,
     ranking_url: str | None = None,
+    excluded_nicknames: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     """Render one compact podium and its optional complete public page."""
 
     if type(limit) is not int or not 1 <= limit <= 20:
         raise ValueError("ranking limit must be between one and twenty")
     normalized_url = normalize_ranking_url(ranking_url)
-    ordered = ranked_players(state, limit=limit)
+    ordered = ranked_players(
+        state,
+        limit=limit,
+        excluded_nicknames=excluded_nicknames,
+    )
     if not ordered:
         lines = (f"{_COLOR_ORANGE}[TOP {limit}]{_RESET} Aucun chasseur classé.",)
     else:
@@ -829,13 +874,20 @@ def render_query(
     last_flight_elapsed_ns: int | None = None,
     shop_url: str | None = None,
     ranking_url: str | None = None,
+    statistics_excluded_nicknames: tuple[str, ...] = (),
     channel: str | None = None,
 ) -> tuple[str, ...]:
     """Project a validated read-only command from immutable game state."""
 
     validate_command(command)
     if command.kind is CommandKind.STATS:
-        return render_profile(state, command.arguments[0] if command.arguments else actor)
+        nickname = command.arguments[0] if command.arguments else actor
+        if is_statistically_excluded(
+            nickname,
+            excluded_nicknames=statistics_excluded_nicknames,
+        ):
+            return (f"{nickname} > Je ne connais aucun chasseur portant ce nom.",)
+        return render_profile(state, nickname)
     if command.kind is CommandKind.INVENTORY:
         return render_inventory(
             state,
@@ -857,6 +909,7 @@ def render_query(
             state,
             limit=rank_limit(command),
             ranking_url=ranking_url,
+            excluded_nicknames=statistics_excluded_nicknames,
         )
     raise ValueError(f"{command_usage(command)} is not a read-only query")
 
@@ -871,6 +924,7 @@ def render_outcome(
 
     actor = _player_name(outcome)
     player = outcome.player
+    fatigued = _fatigue_tag(outcome.fatigue_penalty_bps, outcome.overexcitation_penalty_bps)
     if outcome.kind is OutcomeKind.FLIGHT_STARTED:
         if flight_appearance is not None:
             prefix = ""
@@ -908,17 +962,22 @@ def render_outcome(
         location = "" if channel is None else f" sur {channel}"
         recycled = " [munition recyclée]" if outcome.ammunition_recycled else ""
         carry = _carry_tag(outcome.carry_fatigue_multiplier)
+        ammunition = (
+            _golden_ammunition_tag(outcome)
+            if outcome.flight_kind is FlightKind.GOLDEN
+            else ""
+        )
         target = (
             f"le {_COLOR_GREEN}[CANARD DORÉ]{_RESET}"
             if outcome.flight_kind is FlightKind.GOLDEN
             else "le canard"
         )
         return (
-            f"{actor} > {_BOLD}*BANG*{_RESET}     Tu as eu {target} en {elapsed}, "
+            f"{actor} > {_shot_sound(outcome)}     Tu as eu {target} en {elapsed}, "
             f"ce qui te fait un total de {total} {total_label}{location}.     "
             f"{_BOLD}\\_X<{_RESET}   *COUAC*   "
             f"{_COLOR_GREEN}[{outcome.experience_awarded} xp]{_RESET}"
-            f"{level}{recycled}{carry}",
+            f"{level}{recycled}{ammunition}{carry}{fatigued}",
         )
     if outcome.kind is OutcomeKind.LOOT_ACQUIRED:
         rarity = _loot_rarity_tag(outcome.loot_key)
@@ -965,11 +1024,11 @@ def render_outcome(
     if outcome.kind is OutcomeKind.FLIGHT_SURVIVED:
         if outcome.flight_kind is FlightKind.GOLDEN:
             return (
-                f"{actor} > {_BOLD}*BANG*{_RESET} C'est un "
+                f"{actor} > {_shot_sound(outcome)} C'est un "
                 f"{_COLOR_GREEN}[CANARD DORÉ]{_RESET} ! "
-                f"Il a survécu. [vie -{outcome.damage_dealt}]",
+                f"Il a survécu. [vie -{outcome.damage_dealt}]{fatigued}",
             )
-        return (f"{actor} > Le canard a survécu. [vie -{outcome.damage_dealt}]",)
+        return (f"{actor} > Le canard a survécu. [vie -{outcome.damage_dealt}]{fatigued}",)
     if outcome.kind is OutcomeKind.MISS:
         recycled = " [munition recyclée]" if outcome.ammunition_recycled else ""
         miss = f"{_COLOR_RED}[raté : -{outcome.miss_penalty} xp]{_RESET}"
@@ -980,7 +1039,7 @@ def render_outcome(
                 f"Il n'y a aucun canard dans le coin...   {miss} {wild}{recycled}",
             )
         return (
-            f"{actor} > {_BOLD}*BANG*{_RESET} Raté. {miss}{recycled}",
+            f"{actor} > Raté. {miss}{recycled}{fatigued}",
         )
     if outcome.kind is OutcomeKind.LATE_SHOT:
         delay = "--" if outcome.late_by_ms is None else format_duration_ms(outcome.late_by_ms)
@@ -1059,14 +1118,25 @@ def render_outcome(
             tags += " [bon d'achat]"
         if outcome.discount_percent:
             tags += " [coupon promo.]"
+        if outcome.item_id == 25 and player is not None:
+            before = player.fatigue_centi - outcome.fatigue_changed_centi
+            feeling = ("Tu te sens en pleine forme mais un peu surexcité. [surexcité]"
+                       if player.fatigue_centi < 0 else "Tu te sens en pleine forme."
+                       if player.fatigue_centi == 0 else "")
+            return (
+                f"{actor} > Tu achètes un thermos de café en échange de "
+                f"{outcome.charged_experience} points d'xp. "
+                f"Fatigue : {_fatigue(before)} → {_fatigue(player.fatigue_centi)}. "
+                f"{feeling}{tags}",
+            )
         if outcome.item_id == 7:
             magnitude = outcome.effect_magnitude
-            if type(magnitude) is not int or not 1 <= magnitude <= 15:
+            if type(magnitude) is not int or not 0 <= magnitude <= 15:
                 raise ValueError("targeting-scope purchase magnitude is invalid")
             return (
                 f"{actor} > Tu ajoutes une lunette de visée à ton arme en échange de "
-                f"{outcome.charged_experience} points d'xp. La précision de tes 6 "
-                f"prochains tirs sera augmentée de {magnitude}%.{tags}",
+                f"{outcome.charged_experience} points d'xp. Lunette pour 6 tirs : "
+                f"+{magnitude} points de précision actuellement.{tags}",
             )
         if outcome.item_id == 10:
             magnitude = outcome.effect_magnitude
@@ -1086,12 +1156,27 @@ def render_outcome(
                 raise ValueError("bread purchase count is invalid")
             bread = "morceau" if count == 1 else "morceaux"
             channel_label = "le canal" if channel is None else channel
+            if outcome.effect_magnitude == 20:
+                return (
+                    f"{actor} > Tu achètes un morceau de pain en échange de "
+                    f"{outcome.charged_experience} points d'xp. Pendant 1h, il renforce "
+                    "l'attraction et retarde le départ des nouveaux canards de 20s par morceau. "
+                    "Il reste en place à chaque envol. Karma temporaire : +2,00. "
+                    f"Il y a actuellement {count} {bread} de pain sur {channel_label}.{tags}",
+                )
             return (
                 f"{actor} > Tu achètes un morceau de pain en échange de "
-                f"{outcome.charged_experience} points d'xp, augmentant ainsi les "
-                "chances d'attirer des canards pendant 1h et retardant leur départ. "
+                f"{outcome.charged_experience} points d'xp. Il reste disponible "
+                "pendant 1h ou jusqu'au prochain envol, qui en consommera un. "
+                "Ton karma temporaire augmente aussi de 2,00. "
                 f"Il y a actuellement {count} {bread} de pain sur {channel_label}."
                 f"{tags}",
+            )
+        if outcome.item_id == 20:
+            return (
+                f"{actor} > Tu achètes et utilises un appeau en échange de "
+                f"{outcome.charged_experience} points d'xp, ce qui devrait attirer "
+                f"un canard dans les 10 prochaines minutes.{tags}",
             )
         return (
             f"{actor} > Achat : {_item_label(outcome.item_id)} "
@@ -1102,6 +1187,8 @@ def render_outcome(
     if outcome.kind is OutcomeKind.SHOP_INSUFFICIENT_EXPERIENCE:
         return (f"{actor} > Tu n'es pas assez riche pour cet achat.",)
     if outcome.kind is OutcomeKind.SHOP_NOT_APPLICABLE:
+        if outcome.item_id == 21:
+            return (f"{actor} > Il y a déjà 20 morceaux de pain sur le canal ; achat refusé sans dépense.",)
         return (f"{actor} > Cet achat n'est pas utile actuellement.",)
     if outcome.kind is OutcomeKind.SHOP_EFFECT_ACTIVE:
         return (f"{actor} > {_item_label(outcome.item_id)} est déjà actif.",)
@@ -1118,9 +1205,12 @@ def render_outcome(
             f"{actor} > L'arme de {outcome.target or 'cette cible'} "
             "est immunisée contre cette nuisance.",
         )
+    if outcome.kind is OutcomeKind.EFFECT_CONSUMED:
+        if outcome.item_id == 21:
+            return ("Le canard mange un morceau de pain posé sur le canal.",)
+        return ()
     if outcome.kind in (
         OutcomeKind.EFFECT_EXPIRED,
-        OutcomeKind.EFFECT_CONSUMED,
         OutcomeKind.CHANNEL_ACTION_DUE,
         OutcomeKind.DUCK_ALERT,
         OutcomeKind.CURSE_EXPIRED,
@@ -1204,7 +1294,8 @@ def _render_incident(outcome: Outcome, miss: Outcome | None) -> str:
     tags.append(f"[accident : -{outcome.incident_penalty} xp]")
     if outcome.weapon_confiscated:
         tags.append("[ARME CONFISQUÉE : accident de chasse]")
-    return f"{text}   {_COLOR_RED}{' '.join(tags)}{_RESET}"
+    fatigue = "" if miss is None else _fatigue_tag(miss.fatigue_penalty_bps, miss.overexcitation_penalty_bps)
+    return f"{text}   {_COLOR_RED}{' '.join(tags)}{_RESET}{fatigue}"
 
 
 if set(_ITEM_LABELS) != {item.item_id for item in SHOP_CATALOG}:

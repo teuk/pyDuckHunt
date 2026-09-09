@@ -102,7 +102,8 @@ Observed unusual rewards now include durable shop vouchers, bounded promotion
 coupons, abundance, endurance, blessing, baker and prankster amulets. Their
 effects compose with purchases, fatigue, curses and channel actions while the
 uncalibrated unusual-drop frequency remains explicitly disabled. A pure runtime
-policy validates adaptive 24-, 21- or 18-deadline daily plans, the one-in-eighteen golden
+policy fixes new daily plans at 24 deadlines, retains replay compatibility for
+historical 18- and 21-deadline plans, preserves the one-in-eighteen golden
 weight, golden health and the five-minute flight lifetime without reading a
 clock or drawing randomness inside the game engine.
 The observed permanent protection set now also covers indestructible
@@ -151,6 +152,31 @@ as IRC `!top` into a standalone responsive HTML page after durable journal
 updates. Its least-privilege publication pattern keeps Coin outside the Apache
 document root and delegates one validated root-owned file replacement to a
 hardened path/`oneshot` pair. See `docs/RANKING_PAGE.md`.
+
+## Current beta gameplay
+
+The daily base is fixed at 24 flights. Active bread lasts one hour across
+flights, adds 20 seconds per piece to new ducks and replans method-2 attraction
+at 24 + active pieces (up to 20 pieces). The next deadline is preserved on
+addition and partial expiry; attraction guarantees no extra flight within the
+hour. Paid calls wait durably for an available flight slot. See
+[Channel actions](docs/CHANNEL_ACTIONS.md).
+
+Owner-only `!duckplanning`, private-message `duckplanning` and partyline
+`.duckplanning` expose every planned time and pending action. Owner item replies
+stay private. Player replies reveal no exact future takeoff time.
+
+Profiles show the current scope, fatigue and overexcitation modifiers used by
+live shots. Scope purchases keep six uses and a calculated bonus; new thermos
+purchases set fatigue to -3.00. Ordinary ducks flee after three unsuppressed
+misses, while golden/mechanical ducks are immune to noise. Silencers and silent
+weapons prevent noise. See [Shop rules](docs/SHOP.md) and
+[Player profiles](docs/PLAYER_PROFILE.md).
+
+The generated ranking provides responsive player cards and complete inventory
+previews. An optional exclusion list keeps non-playing operators out of every
+statistical view without erasing their records. State schema 23 retains old
+replay decisions and preserves new counters and effects across restarts.
 
 ## Requirements
 

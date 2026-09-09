@@ -235,13 +235,21 @@ def run_operator_pilot(
         ranking_publisher = (
             None
             if plan.configuration.runtime.ranking_page_path is None
-            else RankingPagePublisher(plan.configuration.runtime.ranking_page_path)
+            else RankingPagePublisher(
+                plan.configuration.runtime.ranking_page_path,
+                excluded_nicknames=(
+                    plan.configuration.game.statistics_excluded_nicknames
+                ),
+            )
         )
         metrics_publisher = (
             None
             if plan.configuration.runtime.metrics_page_path is None
             else PrometheusMetricsPublisher(
-                plan.configuration.runtime.metrics_page_path
+                plan.configuration.runtime.metrics_page_path,
+                excluded_nicknames=(
+                    plan.configuration.game.statistics_excluded_nicknames
+                ),
             )
         )
         publishers = tuple(

@@ -6,16 +6,22 @@ import unittest
 from pathlib import Path
 
 from pyduckhunt.game.commands import CommandKind
-from pyduckhunt.game.model import GameState
+from pyduckhunt.game.model import GameState, PlayerState
 from pyduckhunt.irc import parse_irc_line
 from pyduckhunt.persistence import JournalFile, ReplayEvent, SnapshotStore
+from pyduckhunt.persistence.snapshot import Snapshot
+from pyduckhunt.persistence.journal import GENESIS_DIGEST
+from pyduckhunt.persistence.replay import recover
 from pyduckhunt.runtime import (
     BridgeStatus,
+    CalibratedEventResolver,
+    CalibratedScheduleSource,
     DispatchStatus,
     EventResolutionError,
     IRCCommandContext,
     IRCGameBridge,
     RuntimeOrchestrator,
+    RuntimeSchedulingAdapter,
 )
 
 
@@ -152,6 +158,68 @@ class IRCGameBridgeTests(unittest.TestCase):
         assert result.dispatch is not None
         assert result.dispatch.persistence_ticket is not None
         result.dispatch.persistence_ticket.wait(2)
+
+    def test_player_shop_twenty_and_twenty_one_reach_their_runtime_effects(self) -> None:
+        self.runtime.close(2)
+        initial = GameState(players=(PlayerState("hunter", "Hunter", level=30, experience=300),))
+        self.snapshots.write(Snapshot(0, GENESIS_DIGEST, initial))
+        self.runtime, _ = RuntimeOrchestrator.open(
+            self.journal, self.snapshots, self.batches.append, snapshot_interval=None)
+        initial_scheduler = RuntimeSchedulingAdapter(self.runtime, ("#pond",),
+            CalibratedScheduleSource(lambda minimum, maximum: minimum))
+        initial_scheduler.step(0)
+        self.runtime.persistence.flush(2)
+
+        def settled_integer(minimum: int, maximum: int) -> int:
+            return 200 if minimum <= 200 <= maximum else minimum
+
+        bridge = IRCGameBridge(
+            self.runtime,
+            ("#pond",),
+            CalibratedEventResolver(settled_integer, lambda channel, nick: True),
+        )
+        bread = bridge.handle(100, self.message("!shop 21"))
+        call = bridge.handle(101, self.message("!shop 20"))
+        self.assertEqual(bread.status, BridgeStatus.DISPATCHED)
+        self.assertEqual(call.status, BridgeStatus.DISPATCHED)
+        self.assertIn("morceau de pain".encode(), bread.priority_batch[0])
+        self.assertIn("appeau".encode(), call.priority_batch[0])
+        for result in (bread, call):
+            self.assertTrue(all(wire.startswith(b"PRIVMSG #pond :") for wire in result.priority_batch))
+            self.assertNotRegex(b" ".join(result.priority_batch).decode(), r"\d{2}:\d{2}|\d{4}-\d{2}-\d{2}")
+            assert result.dispatch is not None
+            assert result.dispatch.persistence_ticket is not None
+            result.dispatch.persistence_ticket.wait(2)
+        player = self.runtime.state.player("hunter")
+        assert player is not None
+        self.assertEqual(player.experience_spent, 12)
+        self.assertEqual(self.runtime.state.effects[0].item_id, 21)
+        self.assertEqual(self.runtime.state.scheduled_actions[0].item_id, 20)
+        self.assertEqual(self.runtime.state.scheduled_actions[0].due_at_ns, 200)
+        self.assertIn(b"10 prochaines minutes", call.priority_batch[0])
+        self.assertNotIn(b"quotidien", call.priority_batch[0])
+
+        scheduling = RuntimeSchedulingAdapter(
+            self.runtime,
+            ("#pond",),
+            CalibratedScheduleSource(lambda minimum, maximum: minimum),
+        )
+        self.assertEqual(scheduling.step(199).next_deadline_ns, 200)
+        scheduling.step(200)
+
+        self.assertEqual(len(self.runtime.state.effects), 1)
+        self.assertEqual(self.runtime.state.scheduled_actions, ())
+        assert self.runtime.state.flight is not None
+        self.assertEqual(self.runtime.state.flight.spawned_at_ns, 200)
+        self.assertEqual(self.runtime.state.flight.expires_at_ns, 200 + 320_000_000_000)
+        self.assertIn(b"20s par morceau", bread.priority_batch[0])
+        self.assertNotIn(
+            "Le canard mange un morceau de pain posé sur le canal.".encode(),
+            b" ".join(wire for batch in self.batches for wire in batch if wire.startswith(b"PRIVMSG #pond :")),
+        )
+
+        self.runtime.persistence.flush(2)
+        self.assertEqual(recover(self.snapshots, self.journal).state, self.runtime.state)
 
     def test_successful_live_shot_exposes_xp_and_level_progression(self) -> None:
         started = self.runtime.dispatch(

@@ -76,8 +76,8 @@ the same killing transition.
 
 ## Runtime selection
 
-One injected daily schedule contains 24, 21 or 18 unique ordered deadlines
-inside its UTC day according to durable community progress. Each scheduled
+One new injected daily schedule contains 24 unique ordered deadlines
+inside its UTC day regardless of durable community progress. Each scheduled
 flight uses an injected integer from 1 through 18;
 the first value selects a golden target and all others select a standard target.
 Golden health is injected from 3 through 5 and every flight uses the observed

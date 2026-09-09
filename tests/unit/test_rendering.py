@@ -182,7 +182,7 @@ class ResponseRenderingTests(unittest.TestCase):
             ("penetrating_ammunition", None, "doublés pendant 24h"),
             ("explosive_ammunition", None, "triplés pendant 24h"),
             ("weapon_grease", None, "réduit de moitié pendant 24h"),
-            ("targeting_scope", 7, "6 prochains tirs augmente de 7%"),
+            ("targeting_scope", 7, "6 tirs : +7 points de précision"),
             ("infrared_lock", None, "Dure 24h pour 6 utilisations"),
             ("suppressor", None, "effrayer les canards pendant 24h"),
             ("sunglasses", None, "éblouissement pendant 24h"),
@@ -344,8 +344,8 @@ class ResponseRenderingTests(unittest.TestCase):
                 effect_magnitude=14,
             )
         )[0]
-        self.assertIn("6 prochains tirs", scope)
-        self.assertIn("14%", scope)
+        self.assertIn("6 tirs", scope)
+        self.assertIn("+14 points de précision", scope)
 
         charm = render_outcome(
             Outcome(
@@ -685,7 +685,38 @@ class ResponseRenderingTests(unittest.TestCase):
         )[0]
         self.assertIn("4 points d'xp", line)
         self.assertIn("pendant 1h", line)
+        self.assertIn("prochain envol", line)
+        self.assertIn("karma temporaire", line)
         self.assertIn("2 morceaux de pain sur #pond", line)
+
+    def test_duck_call_purchase_preserves_the_surprise_and_purchase_tags(self) -> None:
+        line = render_outcome(
+            Outcome(
+                OutcomeKind.SHOP_PURCHASED,
+                actor="Alice",
+                item_id=20,
+                charged_experience=8,
+                shop_credit_spent=8,
+                discount_percent=10,
+                due_at_ns=1_788_867_281_000_000_000,
+            ),
+            channel="#pond",
+        )[0]
+        self.assertIn("8 points d'xp", line)
+        self.assertIn("achètes et utilises un appeau", line)
+        self.assertIn("10 prochaines minutes", line)
+        self.assertIn("[bon d'achat]", line)
+        self.assertIn("[coupon promo.]", line)
+        self.assertNotIn("quotidien", line)
+        self.assertNotRegex(line, r"\d{2}:\d{2}|\d{4}-\d{2}-\d{2}|1788867281")
+
+    def test_consumed_bread_is_visible_on_the_channel(self) -> None:
+        self.assertEqual(
+            render_outcome(
+                Outcome(OutcomeKind.EFFECT_CONSUMED, item_id=21)
+            ),
+            ("Le canard mange un morceau de pain posé sur le canal.",),
+        )
 
     def test_shop_is_one_flood_safe_optional_catalog_link(self) -> None:
         self.assertEqual(render_shop(), ("Boutique: !shop [id [cible]]",))
@@ -790,6 +821,30 @@ class ResponseRenderingTests(unittest.TestCase):
         self.assertIn("Bob", line)
         self.assertNotIn("Alice", line)
 
+    def test_query_omits_configured_non_playing_admin_from_ranking(self) -> None:
+        command = parse_command("!duckrank")
+        assert command is not None
+        line = render_query(
+            self.state,
+            "Alice",
+            command,
+            statistics_excluded_nicknames=("Bob",),
+        )[0]
+        self.assertNotIn("Bob", line)
+        self.assertIn("Alice", line)
+
+    def test_query_hides_configured_non_playing_admin_profile(self) -> None:
+        command = parse_command("!duckstats Bob")
+        assert command is not None
+        line = render_query(
+            self.state,
+            "Alice",
+            command,
+            statistics_excluded_nicknames=("Bob",),
+        )[0]
+        self.assertIn("aucun chasseur", line)
+        self.assertNotIn("[Profil]", line)
+
     def test_query_injects_the_ranking_page_without_hard_coding_it(self) -> None:
         command = parse_command("!duckrank")
         assert command is not None
@@ -869,6 +924,59 @@ class ResponseRenderingTests(unittest.TestCase):
         self.assertIn("canard en 2mn34.2s", line)
         self.assertNotIn("154.2s", line)
 
+    def test_explosive_hit_uses_the_reference_boum_sound(self) -> None:
+        outcome = Outcome(
+            OutcomeKind.HIT,
+            actor="Alice",
+            player=self.alice,
+            elapsed_ms=1234,
+            experience_awarded=10,
+            ammunition_item_id=4,
+        )
+        line = render_outcome(outcome, channel="#pond")[0]
+        self.assertIn("*BOUM*", line)
+        self.assertNotIn("*BANG*", line)
+        self.assertNotIn("[mun. expl.]", line)
+
+    def test_golden_ammunition_identity_matches_the_reference_labels(self) -> None:
+        explosive = Outcome(
+            OutcomeKind.HIT,
+            actor="Alice",
+            player=self.alice,
+            flight_kind=FlightKind.GOLDEN,
+            elapsed_ms=1234,
+            experience_awarded=36,
+            ammunition_item_id=4,
+        )
+        penetrating = Outcome(
+            OutcomeKind.HIT,
+            actor="Alice",
+            player=self.alice,
+            flight_kind=FlightKind.GOLDEN,
+            elapsed_ms=1234,
+            experience_awarded=36,
+            ammunition_item_id=3,
+        )
+        explosive_line = render_outcome(explosive, channel="#pond")[0]
+        penetrating_line = render_outcome(penetrating, channel="#pond")[0]
+        self.assertIn("*BOUM*", explosive_line)
+        self.assertIn("[mun. expl.]", explosive_line)
+        self.assertIn("*BANG*", penetrating_line)
+        self.assertIn("[mun. AP]", penetrating_line)
+
+    def test_explosive_golden_survivor_uses_boum_without_inventing_a_tag(self) -> None:
+        outcome = Outcome(
+            OutcomeKind.FLIGHT_SURVIVED,
+            actor="Alice",
+            flight_kind=FlightKind.GOLDEN,
+            damage_dealt=3,
+            ammunition_item_id=4,
+        )
+        line = render_outcome(outcome)[0]
+        self.assertIn("*BOUM*", line)
+        self.assertNotIn("*BANG*", line)
+        self.assertNotIn("[mun. expl.]", line)
+
     def test_reload_response_contains_current_reserves(self) -> None:
         line = render_outcome(
             Outcome(OutcomeKind.RELOADED, actor="Alice", player=self.alice)
@@ -926,7 +1034,6 @@ class ResponseRenderingTests(unittest.TestCase):
     def test_bookkeeping_outcomes_are_silent(self) -> None:
         for kind in (
             OutcomeKind.EFFECT_EXPIRED,
-            OutcomeKind.EFFECT_CONSUMED,
             OutcomeKind.CHANNEL_ACTION_DUE,
             OutcomeKind.DUCK_ALERT,
             OutcomeKind.CURSE_EXPIRED,

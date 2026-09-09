@@ -4,8 +4,16 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from pyduckhunt.game.bread import active_channel_breads, MAX_CHANNEL_BREAD
+from pyduckhunt.game.catalog import GrantKind, shop_item
 from pyduckhunt.game.engine import advance_time
-from pyduckhunt.game.model import GameState, PlayerState, Transition
+from pyduckhunt.game.model import (
+    ActiveEffect,
+    GameState,
+    PlayerState,
+    ScheduledAction,
+    Transition,
+)
 from pyduckhunt.game.progression import experience_required
 from pyduckhunt.identity import rfc1459_casefold
 
@@ -54,6 +62,7 @@ MAX_COUNTER_VALUE = 1_000_000_000
 MAX_CAPACITY = 100
 MAX_LEVEL = 1_000
 WEAPON_CONTROL_OPERATIONS = frozenset(("rearm", "unarm", "unarm_permanent"))
+ADMIN_CHANNEL_ITEM_IDS = frozenset((20, 21))
 
 
 def validate_player_update_request(field: str, operation: str, value: int) -> None:
@@ -77,8 +86,8 @@ def validate_player_update_request(field: str, operation: str, value: int) -> No
         raise PlayerAdministrationError("magazine capacity must be between 0 and 100")
     if field == "level" and not 1 <= value <= MAX_LEVEL:
         raise PlayerAdministrationError("level must be between 1 and 1000")
-    if field == "fatigue_centi" and not 0 <= value <= 10_000:
-        raise PlayerAdministrationError("fatigue must be between 0 and 100 percent")
+    if field == "fatigue_centi" and not -300 <= value <= 10_000:
+        raise PlayerAdministrationError("fatigue must be between -3 and 100 points")
     if operation == "set" and field not in (
         *TRUTH_FIELDS,
         *CAPACITY_FIELDS,
@@ -160,6 +169,93 @@ def apply_weapon_control(
             permanently_confiscated=False,
         )
     return Transition(current.with_player(updated), ())
+
+
+def validate_admin_channel_item_request(
+    item_id: int,
+    now_ns: int,
+    scheduled_for_ns: int | None,
+) -> None:
+    """Validate one replayable owner grant equivalent to shop item 20 or 21."""
+
+    if type(item_id) is not int or item_id not in ADMIN_CHANNEL_ITEM_IDS:
+        raise PlayerAdministrationError("unsupported administrative channel item")
+    if type(now_ns) is not int or now_ns < 0:
+        raise PlayerAdministrationError("administrative item time is invalid")
+    item = shop_item(item_id)
+    assert item is not None
+    if item.grant_kind is GrantKind.CHANNEL_ACTION:
+        assert item.schedule_min_ns is not None and item.schedule_max_ns is not None
+        if type(scheduled_for_ns) is not int or not (
+            now_ns + item.schedule_min_ns
+            <= scheduled_for_ns
+            <= now_ns + item.schedule_max_ns
+        ):
+            raise PlayerAdministrationError(
+                "administrative channel action deadline is invalid"
+            )
+    elif scheduled_for_ns is not None:
+        raise PlayerAdministrationError(
+            "administrative channel effect does not accept a deadline"
+        )
+
+
+def apply_admin_channel_item(
+    state: GameState,
+    actor: str,
+    item_id: int,
+    now_ns: int,
+    *,
+    scheduled_for_ns: int | None = None,
+) -> Transition:
+    """Grant channel bread or a duck call without creating or charging a player."""
+
+    if not isinstance(state, GameState):
+        raise PlayerAdministrationError("administrative item requires game state")
+    if type(actor) is not str or not actor or any(
+        character in actor for character in ("\x00", "\r", "\n", " ")
+    ):
+        raise PlayerAdministrationError("administrative actor is invalid")
+    validate_admin_channel_item_request(item_id, now_ns, scheduled_for_ns)
+    current = advance_time(state, now_ns).state
+    item = shop_item(item_id)
+    assert item is not None
+    if (item_id == 21 and current.bread_plan_effect_ids is not None
+            and len(active_channel_breads(current, now_ns)) >= MAX_CHANNEL_BREAD):
+        raise PlayerAdministrationError("maximum channel bread reached (20)")
+    if item.grant_kind is GrantKind.CHANNEL_ACTION:
+        assert scheduled_for_ns is not None
+        action = ScheduledAction(
+            action_id=current.next_action_id,
+            item_id=item.item_id,
+            key=item.key,
+            source_key=None,
+            created_at_ns=now_ns,
+            due_at_ns=scheduled_for_ns,
+        )
+        updated = replace(
+            current,
+            scheduled_actions=tuple((*current.scheduled_actions, action)),
+            next_action_id=current.next_action_id + 1,
+        )
+    else:
+        assert item.duration_ns is not None
+        effect = ActiveEffect(
+            effect_id=current.next_effect_id,
+            item_id=item.item_id,
+            key=item.key,
+            scope=item.scope,
+            owner_key=None,
+            source_key=None,
+            activated_at_ns=now_ns,
+            expires_at_ns=now_ns + item.duration_ns,
+        )
+        updated = replace(
+            current,
+            effects=tuple((*current.effects, effect)),
+            next_effect_id=current.next_effect_id + 1,
+        )
+    return Transition(updated, ())
 
 
 def _updated_player(

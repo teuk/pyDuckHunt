@@ -19,6 +19,7 @@ from pyduckhunt.game.model import (
     LastFlightConclusion,
     LETTER_SLOT_COUNT,
     PlayerState,
+    MIN_FATIGUE_CENTI,
     ScheduledAction,
     ThrottleWindow,
 )
@@ -32,8 +33,22 @@ from pyduckhunt.game.runtime import (
 )
 
 
-SCHEMA_VERSION = 20
-SUPPORTED_SCHEMA_VERSIONS = (11, 12, 13, 14, 15, 16, 17, 18, 19, SCHEMA_VERSION)
+SCHEMA_VERSION = 23
+SUPPORTED_SCHEMA_VERSIONS = (
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    SCHEMA_VERSION,
+)
 DAY_NS = 86_400_000_000_000
 
 
@@ -94,6 +109,8 @@ def encode_game_state(state: GameState) -> dict[str, object]:
             "max_health": state.flight.max_health,
             "reward_experience": state.flight.reward_experience,
             "spawned_at_ns": state.flight.spawned_at_ns,
+            **({"noisy_misses": state.flight.noisy_misses}
+               if state.flight.noisy_misses is not None else {}),
         }
     last_flight: dict[str, object] | None = None
     if state.last_flight is not None:
@@ -205,6 +222,8 @@ def encode_game_state(state: GameState) -> dict[str, object]:
         for window in state.throttle_windows
     ]
     return {
+        **({} if state.bread_plan_effect_ids is None else
+           {"bread_plan_effect_ids": list(state.bread_plan_effect_ids)}),
         "curses": curses,
         "daily_schedule": daily_schedule,
         "effects": effects,
@@ -242,6 +261,15 @@ def _decode_game_state(raw: object, schema_version: int) -> GameState:
         state_fields.add("last_flight")
     if schema_version >= 19:
         state_fields.add("last_shooter_key")
+    bread_ids = None
+    if schema_version >= 22 and "bread_plan_effect_ids" in payload:
+        raw_ids = payload["bread_plan_effect_ids"]
+        if not isinstance(raw_ids, list):
+            raise CodecError("bread planning identifiers must be an array")
+        bread_ids = tuple(_integer(v, "bread_plan_effect_ids", minimum=1) for v in raw_ids)
+        if bread_ids != tuple(sorted(set(bread_ids))):
+            raise CodecError("bread planning identifiers must be unique and sorted")
+        state_fields.add("bread_plan_effect_ids")
     _exact_keys(
         payload,
         state_fields,
@@ -268,7 +296,8 @@ def _decode_game_state(raw: object, schema_version: int) -> GameState:
                 "max_health",
                 "reward_experience",
                 "spawned_at_ns",
-            },
+            } | ({"noisy_misses"} if schema_version >= 23
+                 and "noisy_misses" in flight_payload else set()),
             "state.flight",
         )
         try:
@@ -302,6 +331,8 @@ def _decode_game_state(raw: object, schema_version: int) -> GameState:
             max_health=max_health,
             kind=flight_kind,
             reward_experience=reward_experience,
+            noisy_misses=(_integer(flight_payload["noisy_misses"], "state.flight.noisy_misses")
+                          if "noisy_misses" in flight_payload else None),
         )
 
     last_flight: LastFlight | None = None
@@ -522,6 +553,7 @@ def _decode_game_state(raw: object, schema_version: int) -> GameState:
                 fatigue_centi=_integer(
                     player["fatigue_centi"],
                     f"{field}.fatigue_centi",
+                    minimum=MIN_FATIGUE_CENTI,
                 ),
                 inventory=tuple(inventory),
                 jammed=jammed,
@@ -669,8 +701,10 @@ def _decode_game_state(raw: object, schema_version: int) -> GameState:
         )
         key = action["key"]
         source_key = action["source_key"]
-        if not isinstance(key, str) or not isinstance(source_key, str):
-            raise CodecError(f"{field} key fields must be strings")
+        if not isinstance(key, str) or (
+            source_key is not None and not isinstance(source_key, str)
+        ) or (source_key is None and schema_version < 21):
+            raise CodecError(f"{field} key fields differ from their schema")
         decoded_action = ScheduledAction(
                 action_id=_integer(action["action_id"], f"{field}.action_id", minimum=1),
                 item_id=_integer(action["item_id"], f"{field}.item_id", minimum=1),
@@ -750,7 +784,7 @@ def _decode_game_state(raw: object, schema_version: int) -> GameState:
             ),
         )
         try:
-            validate_daily_schedule_state(daily_schedule)
+            validate_daily_schedule_state(daily_schedule, allow_bread=bread_ids is not None)
         except ValueError as error:
             raise CodecError("state.daily_schedule violates runtime policy") from error
 
@@ -818,6 +852,7 @@ def _decode_game_state(raw: object, schema_version: int) -> GameState:
         curses=tuple(curses),
         daily_schedule=daily_schedule,
         throttle_windows=tuple(throttle_windows),
+        bread_plan_effect_ids=bread_ids,
     )
 
 

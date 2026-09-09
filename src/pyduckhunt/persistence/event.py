@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Any
 
 from pyduckhunt.game.admin import (
+    validate_admin_channel_item_request,
     validate_player_update_request,
     validate_weapon_control_request,
 )
@@ -22,6 +23,7 @@ from pyduckhunt.game.model import (
 )
 from pyduckhunt.game.targets import flight_reward, validate_flight_reward
 from pyduckhunt.game.runtime import (
+    FIXED_DAILY_FLIGHT_COUNT,
     FlightSelection,
     validate_daily_schedule,
 )
@@ -29,16 +31,20 @@ from pyduckhunt.persistence.codec import CodecError
 
 
 class EventKind(str, Enum):
+    ENABLE_HOURLY_BREAD = "enable_hourly_bread"
+    REPLAN_BREAD_SCHEDULE = "replan_bread_schedule"
     START_FLIGHT = "start_flight"
     COMMAND = "command"
     PURCHASE = "purchase"
     ADVANCE_TIME = "advance_time"
     INSTALL_DAILY_SCHEDULE = "install_daily_schedule"
+    EXPAND_DAILY_SCHEDULE = "expand_daily_schedule"
     SCHEDULE_TICK = "schedule_tick"
     RUNTIME_COMMAND = "runtime_command"
     RUNTIME_PURCHASE = "runtime_purchase"
     ADMIN_PLAYER_UPDATE = "admin_player_update"
     ADMIN_WEAPON_CONTROL = "admin_weapon_control"
+    ADMIN_CHANNEL_ITEM = "admin_channel_item"
 
 
 def _event_mapping(value: object, field: str) -> Mapping[str, Any]:
@@ -135,7 +141,25 @@ class ReplayEvent:
             self.admin_field,
             self.admin_value,
         )
-        if self.kind is EventKind.ADMIN_PLAYER_UPDATE:
+        if self.kind is EventKind.ADMIN_CHANNEL_ITEM:
+            if (
+                not self.admin_actor
+                or any(
+                    character in self.admin_actor
+                    for character in (" ", "\x00", "\r", "\n")
+                )
+                or self.item_id is None
+                or self.admin_operation is not None
+                or self.admin_field is not None
+                or self.admin_value is not None
+            ):
+                raise ValueError("admin channel item has incomplete identity")
+            validate_admin_channel_item_request(
+                self.item_id,
+                self.now_ns,
+                self.scheduled_for_ns,
+            )
+        elif self.kind is EventKind.ADMIN_PLAYER_UPDATE:
             if (
                 not self.nickname
                 or not self.admin_actor
@@ -194,13 +218,23 @@ class ReplayEvent:
                 )
             ) or self.arguments or self.delay_settled or self.schedule_deadlines_ns:
                 raise ValueError("start_flight contains command-only fields")
-        elif self.kind is EventKind.INSTALL_DAILY_SCHEDULE:
+        elif self.kind in (
+            EventKind.INSTALL_DAILY_SCHEDULE,
+            EventKind.EXPAND_DAILY_SCHEDULE,
+            EventKind.REPLAN_BREAD_SCHEDULE,
+        ):
             if self.schedule_day_start_ns is None:
                 raise ValueError("schedule installation requires a UTC-day start")
             validate_daily_schedule(
                 self.schedule_day_start_ns,
                 self.schedule_deadlines_ns,
+                allow_bread=self.kind is EventKind.REPLAN_BREAD_SCHEDULE,
             )
+            if (
+                self.kind is EventKind.EXPAND_DAILY_SCHEDULE
+                and len(self.schedule_deadlines_ns) != FIXED_DAILY_FLIGHT_COUNT
+            ):
+                raise ValueError("schedule expansion must reach the fixed daily count")
             if any(
                 value is not None
                 for value in (
@@ -334,7 +368,7 @@ class ReplayEvent:
                 raise ValueError("purchase fatigue relief is invalid")
             if self.fatigue_target_centi is not None and (
                 type(self.fatigue_target_centi) is not int
-                or self.fatigue_target_centi < 0
+                or self.fatigue_target_centi < -300
             ):
                 raise ValueError("purchase fatigue target is invalid")
             if any(
@@ -397,6 +431,28 @@ class ReplayEvent:
                 )
             ) or self.arguments or self.delay_settled or self.schedule_deadlines_ns:
                 raise ValueError("admin weapon control contains unrelated fields")
+        elif self.kind is EventKind.ADMIN_CHANNEL_ITEM:
+            if any(
+                value is not None
+                for value in (
+                    self.lifetime_ns,
+                    self.flight_health,
+                    self.flight_kind,
+                    self.flight_reward_experience,
+                    self.nickname,
+                    self.command_kind,
+                    self.invoked_as,
+                    self.charged_cost,
+                    self.magnitude,
+                    self.target_nickname,
+                    self.target_present,
+                    self.fatigue_relief_centi,
+                    self.fatigue_target_centi,
+                    self.shot_attempt,
+                    self.schedule_day_start_ns,
+                )
+            ) or self.arguments or self.delay_settled or self.schedule_deadlines_ns:
+                raise ValueError("admin channel item contains unrelated fields")
         elif any(
             value is not None
             for value in (
@@ -527,6 +583,23 @@ class ReplayEvent:
         )
 
     @classmethod
+    def admin_channel_item(
+        cls,
+        now_ns: int,
+        actor: str,
+        item_id: int,
+        *,
+        scheduled_for_ns: int | None = None,
+    ) -> ReplayEvent:
+        return cls(
+            EventKind.ADMIN_CHANNEL_ITEM,
+            now_ns,
+            item_id=item_id,
+            scheduled_for_ns=scheduled_for_ns,
+            admin_actor=actor,
+        )
+
+    @classmethod
     def install_daily_schedule(
         cls,
         now_ns: int,
@@ -539,6 +612,30 @@ class ReplayEvent:
             schedule_day_start_ns=day_start_ns,
             schedule_deadlines_ns=deadlines_ns,
         )
+
+    @classmethod
+    def expand_daily_schedule(
+        cls,
+        now_ns: int,
+        day_start_ns: int,
+        deadlines_ns: tuple[int, ...],
+    ) -> ReplayEvent:
+        return cls(
+            EventKind.EXPAND_DAILY_SCHEDULE,
+            now_ns,
+            schedule_day_start_ns=day_start_ns,
+            schedule_deadlines_ns=deadlines_ns,
+        )
+
+    @classmethod
+    def replan_bread_schedule(cls, now_ns: int, day_start_ns: int,
+                              deadlines_ns: tuple[int, ...]) -> ReplayEvent:
+        return cls(EventKind.REPLAN_BREAD_SCHEDULE, now_ns,
+                   schedule_day_start_ns=day_start_ns, schedule_deadlines_ns=deadlines_ns)
+
+    @classmethod
+    def enable_hourly_bread(cls, now_ns: int) -> ReplayEvent:
+        return cls(EventKind.ENABLE_HOURLY_BREAD, now_ns)
 
     @classmethod
     def schedule_tick(
@@ -627,7 +724,11 @@ class ReplayEvent:
             payload["health"] = self.flight_health
             payload["flight_kind"] = self.flight_kind.value
             payload["reward_experience"] = self.flight_reward_experience
-        elif self.kind is EventKind.INSTALL_DAILY_SCHEDULE:
+        elif self.kind in (
+            EventKind.INSTALL_DAILY_SCHEDULE,
+            EventKind.EXPAND_DAILY_SCHEDULE,
+            EventKind.REPLAN_BREAD_SCHEDULE,
+        ):
             payload["day_start_ns"] = self.schedule_day_start_ns
             payload["deadlines_ns"] = list(self.schedule_deadlines_ns)
         elif self.kind is EventKind.SCHEDULE_TICK:
@@ -653,7 +754,15 @@ class ReplayEvent:
                             "base_accuracy_bps": self.shot_attempt.base_accuracy_bps,
                             "base_jam_bps": self.shot_attempt.base_jam_bps,
                             "frighten_on_miss": self.shot_attempt.frighten_on_miss,
+                            **({"noisy_miss_limit": self.shot_attempt.noisy_miss_limit}
+                               if self.shot_attempt.noisy_miss_limit is not None else {}),
                             "fatigue_gain_centi": self.shot_attempt.fatigue_gain_centi,
+                            **({"fatigue_penalty_bps": self.shot_attempt.fatigue_penalty_bps}
+                               if self.shot_attempt.fatigue_penalty_bps else {}),
+                            **({"overexcitation_penalty_bps": self.shot_attempt.overexcitation_penalty_bps}
+                               if self.shot_attempt.overexcitation_penalty_bps else {}),
+                            **({"scope_bonus_points": self.shot_attempt.scope_bonus_points}
+                               if self.shot_attempt.scope_bonus_points is not None else {}),
                             "incident": (
                                 None
                                 if self.shot_attempt.incident is None
@@ -718,6 +827,14 @@ class ReplayEvent:
                     "operation": self.admin_operation,
                 }
             )
+        elif self.kind is EventKind.ADMIN_CHANNEL_ITEM:
+            payload.update(
+                {
+                    "actor": self.admin_actor,
+                    "item_id": self.item_id,
+                    "scheduled_for_ns": self.scheduled_for_ns,
+                }
+            )
         return payload
 
     @classmethod
@@ -763,7 +880,11 @@ class ReplayEvent:
             except (TypeError, ValueError) as error:
                 raise CodecError("start_flight target settlement is invalid") from error
 
-        if kind is EventKind.INSTALL_DAILY_SCHEDULE:
+        if kind in (
+            EventKind.INSTALL_DAILY_SCHEDULE,
+            EventKind.EXPAND_DAILY_SCHEDULE,
+            EventKind.REPLAN_BREAD_SCHEDULE,
+        ):
             if set(raw) != {"day_start_ns", "deadlines_ns", "kind", "now_ns"}:
                 raise CodecError("schedule installation fields differ from schema")
             day_start_ns = raw["day_start_ns"]
@@ -775,11 +896,13 @@ class ReplayEvent:
             ):
                 raise CodecError("schedule installation values are invalid")
             try:
-                return cls.install_daily_schedule(
-                    now_ns,
-                    day_start_ns,
-                    tuple(deadlines_ns),
+                constructor = (
+                    cls.install_daily_schedule
+                    if kind is EventKind.INSTALL_DAILY_SCHEDULE
+                    else cls.replan_bread_schedule if kind is EventKind.REPLAN_BREAD_SCHEDULE
+                    else cls.expand_daily_schedule
                 )
+                return constructor(now_ns, day_start_ns, tuple(deadlines_ns))
             except ValueError as error:
                 raise CodecError("schedule installation violates runtime policy") from error
 
@@ -814,10 +937,10 @@ class ReplayEvent:
             except (TypeError, ValueError) as error:
                 raise CodecError("schedule tick settlement is invalid") from error
 
-        if kind is EventKind.ADVANCE_TIME:
+        if kind in (EventKind.ADVANCE_TIME, EventKind.ENABLE_HOURLY_BREAD):
             if set(raw) != {"kind", "now_ns"}:
                 raise CodecError("advance_time event fields differ from schema")
-            return cls.advance_time(now_ns)
+            return cls(kind, now_ns)
 
         if kind is EventKind.ADMIN_PLAYER_UPDATE:
             if set(raw) != {
@@ -860,6 +983,25 @@ class ReplayEvent:
                 )
             except (TypeError, ValueError) as error:
                 raise CodecError("admin weapon control values are invalid") from error
+
+        if kind is EventKind.ADMIN_CHANNEL_ITEM:
+            if set(raw) != {
+                "actor",
+                "item_id",
+                "kind",
+                "now_ns",
+                "scheduled_for_ns",
+            }:
+                raise CodecError("admin channel item fields differ from schema")
+            try:
+                return cls.admin_channel_item(
+                    now_ns,
+                    raw["actor"],
+                    raw["item_id"],
+                    scheduled_for_ns=raw["scheduled_for_ns"],
+                )
+            except (TypeError, ValueError) as error:
+                raise CodecError("admin channel item values are invalid") from error
 
         if kind in (EventKind.PURCHASE, EventKind.RUNTIME_PURCHASE):
             legacy_fields = {
@@ -917,7 +1059,7 @@ class ReplayEvent:
                     fatigue_target_centi is not None
                     and (
                         type(fatigue_target_centi) is not int
-                        or fatigue_target_centi < 0
+                        or fatigue_target_centi < -300
                     )
                 )
                 or (
@@ -997,11 +1139,14 @@ class ReplayEvent:
             }
             legacy_shot_fields = set(expected_shot_fields)
             expected_shot_fields.add("recycler_roll")
-            if set(shot_payload) not in (
-                legacy_shot_fields,
-                expected_shot_fields,
+            if set(shot_payload) - {"fatigue_penalty_bps", "overexcitation_penalty_bps", "scope_bonus_points", "noisy_miss_limit"} not in (
+                legacy_shot_fields, expected_shot_fields,
             ):
                 raise CodecError("shot attempt fields differ from schema")
+            if "scope_bonus_points" in shot_payload and shot_payload["scope_bonus_points"] is None:
+                raise CodecError("explicit scope bonus cannot be null")
+            if "noisy_miss_limit" in shot_payload and shot_payload["noisy_miss_limit"] is None:
+                raise CodecError("explicit noisy miss limit cannot be null")
             raw_incident = shot_payload["incident"]
             incident: IncidentAttempt | None = None
             if raw_incident is not None:
@@ -1057,9 +1202,13 @@ class ReplayEvent:
                     jam_roll=shot_payload["jam_roll"],
                     recycler_roll=shot_payload.get("recycler_roll"),
                     frighten_on_miss=shot_payload["frighten_on_miss"],
+                    noisy_miss_limit=shot_payload.get("noisy_miss_limit"),
                     miss_penalty=shot_payload["miss_penalty"],
                     wild_penalty=shot_payload["wild_penalty"],
                     fatigue_gain_centi=shot_payload["fatigue_gain_centi"],
+                    fatigue_penalty_bps=shot_payload.get("fatigue_penalty_bps", 0),
+                    overexcitation_penalty_bps=shot_payload.get("overexcitation_penalty_bps", 0),
+                    scope_bonus_points=shot_payload.get("scope_bonus_points"),
                     incident=incident,
                     loot=loot,
                 )

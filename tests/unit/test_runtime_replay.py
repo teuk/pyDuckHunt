@@ -7,6 +7,7 @@ from pyduckhunt.game.model import GameState, OutcomeKind
 from pyduckhunt.game.runtime import (
     apply_runtime_command,
     build_daily_schedule,
+    expand_daily_schedule,
     install_daily_schedule,
     select_scheduled_flight,
     tick_daily_schedule,
@@ -30,6 +31,18 @@ class RuntimeReplayTests(unittest.TestCase):
     def test_schedule_installation_payload_round_trip(self) -> None:
         event = ReplayEvent.install_daily_schedule(0, 0, SCHEDULE)
         self.assertEqual(ReplayEvent.from_payload(event.to_payload()), event)
+
+    def test_schedule_expansion_payload_and_replay_match_direct_transition(self) -> None:
+        installed = install_daily_schedule(GameState(), 0, 0, SCHEDULE)
+        expanded = tuple(sorted((*SCHEDULE, *(range(19, 25)))))
+        event = ReplayEvent.expand_daily_schedule(1, 0, expanded)
+        self.assertEqual(ReplayEvent.from_payload(event.to_payload()), event)
+        self.assertEqual(
+            apply_replay_event(installed.state, event),
+            expand_daily_schedule(installed.state, 1, expanded),
+        )
+        with self.assertRaises(ValueError):
+            ReplayEvent.expand_daily_schedule(1, 0, expanded[:-1])
 
     def test_scheduled_tick_payload_round_trip_with_and_without_selection(self) -> None:
         due = ReplayEvent.schedule_tick(

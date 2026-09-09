@@ -4,8 +4,15 @@ import unittest
 
 from pyduckhunt.game.commands import Command, CommandKind
 from pyduckhunt.game.engine import apply_command, start_flight
-from pyduckhunt.game.model import GameState, OutcomeKind, PlayerState, ShotAttempt
+from pyduckhunt.game.model import (
+    GameState,
+    Outcome,
+    OutcomeKind,
+    PlayerState,
+    ShotAttempt,
+)
 from pyduckhunt.game.shop import purchase
+from pyduckhunt.rendering import render_outcome
 
 
 SHOT = Command(CommandKind.SHOT, "bang")
@@ -139,6 +146,7 @@ class ShotEffectTests(unittest.TestCase):
         result = apply_command(flight.state, "Hunter", SHOT, 300)
         self.assertEqual(result.outcomes[-1].kind, OutcomeKind.FLIGHT_SURVIVED)
         self.assertEqual(result.outcomes[-1].damage_dealt, 2)
+        self.assertEqual(result.outcomes[-1].ammunition_item_id, 3)
         self.assertEqual(result.state.flight.health, 2)
 
     def test_explosive_ammunition_deals_three_damage(self) -> None:
@@ -147,7 +155,20 @@ class ShotEffectTests(unittest.TestCase):
         result = apply_command(flight.state, "Hunter", SHOT, 300)
         self.assertEqual(result.outcomes[-1].kind, OutcomeKind.HIT)
         self.assertEqual(result.outcomes[-1].damage_dealt, 3)
+        self.assertEqual(result.outcomes[-1].ammunition_item_id, 4)
         self.assertIsNone(result.state.flight)
+        rendered = render_outcome(result.outcomes[-1])[0]
+        self.assertIn("*BOUM*", rendered)
+        self.assertNotIn("*BANG*", rendered)
+
+    def test_standard_ammunition_is_explicitly_absent_from_the_outcome(self) -> None:
+        flight = start_flight(player_state(), 200, lifetime_ns=10_000)
+        result = apply_command(flight.state, "Hunter", SHOT, 300)
+        self.assertIsNone(result.outcomes[-1].ammunition_item_id)
+
+    def test_outcome_rejects_a_non_ammunition_item_identifier(self) -> None:
+        with self.assertRaises(ValueError):
+            Outcome(OutcomeKind.HIT, ammunition_item_id=2)
 
     def test_lucky_charm_adds_its_magnitude_to_hit_experience(self) -> None:
         state = equipped(10, magnitude=7)

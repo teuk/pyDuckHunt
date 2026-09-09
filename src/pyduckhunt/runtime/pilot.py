@@ -153,6 +153,9 @@ def build_development_pilot(
             last_flight_provider=last_flight_provider,
             shop_url=configuration.game.shop_url,
             ranking_url=configuration.game.ranking_url,
+            statistics_excluded_nicknames=(
+                configuration.game.statistics_excluded_nicknames
+            ),
         )
         partyline = (
             None
@@ -174,6 +177,9 @@ def build_development_pilot(
                 anti_cheat=configuration.game.anti_cheat,
                 integer_source=partyline_integer_source,
                 ranking_url=configuration.game.ranking_url,
+                statistics_excluded_nicknames=(
+                    configuration.game.statistics_excluded_nicknames
+                ),
             )
         )
         shell = ProcessShell(

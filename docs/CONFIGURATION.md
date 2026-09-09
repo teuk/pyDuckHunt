@@ -24,14 +24,18 @@ keeps public export disabled. See `RANKING_PAGE.md` for the publication boundary
 The metrics path receives only aggregate, bounded-cardinality observations; its
 omission disables Prometheus export. See `METRICS_GRAFANA.md`.
 Game configuration keeps the
-adaptive 24/21/18-flight schedule, one-in-eighteen golden weight, five-minute
+fixed 24-flight schedule, one-in-eighteen golden weight, five-minute
 flight lifetime and disabled unusual-loot boundary exact. Its optional
 `shop_url` is either empty or omitted, which keeps `!shop` link-free, or one
 bounded credential-free HTTPS URL selected by the operator. The optional
 `ranking_url` follows the same strict HTTPS boundary. Empty or omitted keeps
 `!duckrank` link-free; when configured, it points players to the separately
 published complete ranking without coupling IRC rendering to its deployment
-hostname. The optional
+hostname. `statistics_excluded_nicknames` is an optional array of unique
+RFC1459 identities. It removes non-playing operators from IRC rankings, direct
+`!duckstats` lookup, the partyline summary, the generated HTML page and
+aggregate Prometheus player statistics; it never deletes or rewrites their
+durable history. The optional
 `anti_cheat` truth value defaults to false. A live operator may enable it to
 draw independently randomized flight trails, silhouettes and utterances from
 the same operating-system-backed bounded integer source used by runtime

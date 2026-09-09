@@ -19,6 +19,16 @@ ranking_url = "https://games.example/DuckHunt/rankings"
 When present, `!duckrank` shows its colored top five and then this complete
 page on a separate public line. When absent, the command remains link-free.
 
+Non-playing operators may be excluded consistently from every statistical
+projection without deleting their durable history:
+
+```toml
+statistics_excluded_nicknames = ["Te[u]K"]
+```
+
+The same RFC1459-aware list applies to `!duckstats`, `!duckrank`, partyline
+`.summary`, this HTML page and aggregate Prometheus player totals.
+
 When omitted or empty, no page is generated. The path must be absolute, end in
 `.html` and point into an existing real directory. Startup publishes the
 recovered state. Every later page follows a successfully appended replay event,
@@ -38,6 +48,24 @@ The page shows the available XP balance rather than invented lifetime earnings.
 The displayed accuracy is the calibrated weapon accuracy for the current level.
 There is no per-player last-activity column because that fact is not part of the
 durable model.
+
+The final table column exposes the same current facts as IRC `!inventory` for
+each ranked hunter: weapon state, ammunition, magazines, carried ducks, letter
+collection, durable equipment, active effects and remaining bounds, shop credit,
+channel bread and curses. The bag icon provides a native multiline hover hint;
+hover or keyboard focus opens the styled card, while click or tap keeps the
+script-free `<details>` panel open. Nicknames and every inventory fragment are
+HTML-escaped, and statistically excluded operators receive no row or inventory.
+This is part of the generated page itself and does not change the privileged
+spool-to-web publication service.
+
+The desktop grid deliberately groups the original 24 facts into eleven columns:
+identity, hunting totals, best time, progression, weapon, condition, ammunition,
+shot history, accident history and the final inventory cell. No statistic is
+removed. The table uses the available width without a forced 2200-pixel canvas;
+below 1180 pixels the same facts become two-column player cards, then one column
+on narrow phones. Consequently the inventory control is reachable without a
+hidden horizontal scrollbar at every supported width.
 
 The generated document carries the same compact editorial visual system as the
 static site: restrained status colors, flat surfaces, readable table typography

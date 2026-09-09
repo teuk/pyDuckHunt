@@ -6,8 +6,12 @@ sleep, create timers or write persistence.
 
 ## Daily flights
 
-- A UTC-day schedule contains 24 unique deadlines through 24 community hits,
-  21 through 99 hits and 18 from 100 hits onward.
+- Every new UTC-day schedule has a base of 24 unique deadlines, regardless
+  of community activity.
+- On upgrade, a durable 18- or 21-deadline plan for the current day is extended
+  to 24 using only randomized future minutes. Existing deadlines and the
+  consumed cursor are preserved, and the complete extension is journaled
+  before it can affect runtime behavior.
 - Every deadline lies inside the represented day.
 - The builder consumes one distinct injected hour and one injected minute per
   slot. A selected midnight deadline moves to 00:01 so it cannot collide with
@@ -20,9 +24,8 @@ sleep, create timers or write persistence.
 Mechanical targets remain explicit consequences of durable channel actions and
 do not enter the scheduled random weighting.
 
-The schedule and its next unconsumed index are part of canonical state. The
-adaptive count is selected only when a new UTC-day plan is installed; progress
-changes never replace the current day's plan. An installation replay event
+The schedule and its next unconsumed index are part of canonical state.
+Community progress never changes the daily count. An installation replay event
 stores every concrete deadline. A tick at an exact
 deadline may dispatch one already-selected flight. A tick without a selection
 consumes that deadline as missed. Every earlier deadline is also consumed as
@@ -75,3 +78,11 @@ to the unusual catalog.
 The public sample leaves the unusual chance at zero. This is a deliberate
 calibration boundary, not a claim that unusual rewards never occur. A later
 pilot round may set the frequency without changing acquisition or replay.
+
+## Bread attraction
+
+With the hourly bread rule active, the current plan contains 24 plus the active
+bread count (maximum 20). Adding or expiring bread redraws it using reference
+method 2, preserving the next future time on addition and partial expiry. The
+last expiry redraws 24 slots. A current plan's elapsed slots are not a history
+of actual kills or launches. See `CHANNEL_ACTIONS.md` for precise semantics.

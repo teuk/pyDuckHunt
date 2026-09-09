@@ -106,6 +106,7 @@ class IRCGameBridge:
         last_flight_provider: LastFlightProvider | None = None,
         shop_url: str | None = None,
         ranking_url: str | None = None,
+        statistics_excluded_nicknames: tuple[str, ...] = (),
     ) -> None:
         if not isinstance(runtime, RuntimeOrchestrator):
             raise ValueError("IRC game bridge requires a runtime orchestrator")
@@ -136,6 +137,7 @@ class IRCGameBridge:
         self._last_flight_provider = last_flight_provider
         self._shop_url = normalized_shop_url
         self._ranking_url = normalized_ranking_url
+        self._statistics_excluded_nicknames = statistics_excluded_nicknames
         self._last_now_ns: int | None = None
         self._owner_thread = threading.get_ident()
 
@@ -210,6 +212,7 @@ class IRCGameBridge:
                 elapsed,
                 self._shop_url,
                 self._ranking_url,
+                self._statistics_excluded_nicknames,
             )
             return _render_command_response(command, nickname, channel, lines)
 
@@ -307,6 +310,7 @@ def _render_transition(
     last_flight_elapsed_ns: int | None,
     shop_url: str | None,
     ranking_url: str | None,
+    statistics_excluded_nicknames: tuple[str, ...],
 ) -> tuple[str, ...]:
     query = any(outcome.kind is OutcomeKind.QUERY for outcome in transition.outcomes)
     visible = render_outcomes(
@@ -325,6 +329,7 @@ def _render_transition(
             last_flight_elapsed_ns=last_flight_elapsed_ns,
             shop_url=shop_url,
             ranking_url=ranking_url,
+            statistics_excluded_nicknames=statistics_excluded_nicknames,
             channel=context.channel,
         )
         if query

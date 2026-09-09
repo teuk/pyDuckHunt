@@ -39,16 +39,16 @@ class PartylineUserStoreTests(unittest.TestCase):
         self.assertEqual(self.store.users(), (user,))
         self.assertEqual(
             self.store.owner_for_irc(
-                "op{e}rator",
-                prefix="Op[e]rator!elsewhere@elsewhere",
+                "ChangedNick",
+                prefix="ChangedNick!elsewhere@elsewhere",
                 account="OPERATOR",
             ),
             user,
         )
         self.assertEqual(
             self.store.owner_for_irc(
-                "Op[e]rator",
-                prefix="Op[e]rator!user@example",
+                "ChangedNick",
+                prefix="ChangedNick!user@example",
                 account=None,
             ),
             user,
@@ -60,10 +60,58 @@ class PartylineUserStoreTests(unittest.TestCase):
                 account="Other",
             )
         )
+
+    def test_owner_account_survives_nick_changes_and_mismatch_fails_closed(self) -> None:
+        user = self.store.create_first_owner(
+            "StoredHandle",
+            "a sufficiently long password",
+            42,
+            irc_account="TeukAccount",
+            irc_mask="OriginalNick!user@trusted.example",
+        )
+        self.assertEqual(
+            self.store.owner_for_irc(
+                "CompletelyDifferentNick",
+                prefix="CompletelyDifferentNick!elsewhere@changed.example",
+                account="TEUKACCOUNT",
+            ),
+            user,
+        )
+        self.assertIsNone(
+            self.store.owner_for_irc(
+                "OriginalNick",
+                prefix="OriginalNick!user@trusted.example",
+                account="IntruderAccount",
+            )
+        )
         self.assertIsNone(
             self.store.owner_for_irc(
                 "Op[e]rator",
                 prefix="Op[e]rator!intruder@example",
+                account=None,
+            )
+        )
+
+    def test_owner_mask_fallback_uses_stable_ident_and_host_not_nick(self) -> None:
+        user = self.store.create_first_owner(
+            "StoredHandle",
+            "a sufficiently long password",
+            42,
+            irc_account=None,
+            irc_mask="OriginalNick!stable@trusted.example",
+        )
+        self.assertEqual(
+            self.store.owner_for_irc(
+                "ChangedNick",
+                prefix="ChangedNick!stable@trusted.example",
+                account=None,
+            ),
+            user,
+        )
+        self.assertIsNone(
+            self.store.owner_for_irc(
+                "ChangedNick",
+                prefix="ChangedNick!intruder@trusted.example",
                 account=None,
             )
         )

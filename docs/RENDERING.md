@@ -66,15 +66,25 @@ the phrase emits one summary line regardless of bundle size. Successful shots
 deliberately retain separate public hit and bush-search lines. The hit line uses
 the channel supplied by the IRC command context, one-decimal reaction time,
 total hunts, experience and level progression; it never embeds a
-deployment-specific channel name.
+deployment-specific channel name. It also retains the reference ammunition
+signature: explosive hits say `*BOUM*`, while ordinary and AP hits say
+`*BANG*`; a killed golden target additionally exposes `[mun. expl.]` or
+`[mun. AP]`. The renderer consumes the explicit ammunition item stored in the
+outcome rather than guessing from damage, because curse composition can alter
+damage independently.
 
 `!duckrank` defaults to five hunters while retaining the explicit 1–20
 boundary. Its first public line uses a compact colored podium with medals for
-the leading three places. When `ranking_url` is configured, a second public
-line links to the complete ranking page. The two semantic lines are deliberately
-kept separate instead of being packed together. A shop identifier must be a
-positive ASCII integer; whether the item exists or requires a target remains a
-game-engine decision so it can produce a precise player outcome.
+the leading three places. Identities configured in
+`statistics_excluded_nicknames` are omitted before ordering and limiting, so
+an operator never displaces a hunter. Direct `!duckstats` lookup returns the
+same unknown-hunter response for an excluded identity, and the partyline
+summary omits it even when it is the last shooter. When `ranking_url` is
+configured, a second public line links to the complete ranking page. The two
+semantic lines are deliberately kept separate instead of being packed
+together. A shop identifier must be a positive ASCII integer; whether the item
+exists or requires a target remains a game-engine decision so it can produce a
+precise player outcome.
 
 Successful purchases whose useful value is settled at runtime expose that exact
 value immediately: the targeting scope announces its accuracy percentage and
@@ -124,3 +134,14 @@ Non-ordinary loot appends exactly one colored tier marker: green
 `[encombré]` and `[surchargé]` are red in hit and inventory projections.
 Scheduled-action outcomes remain silent here, while the runtime scheduler routes
 each detector outcome exactly once through the bounded IRC NOTICE path.
+
+## Scope units
+
+Scope purchase and loot messages use percentage points and explain the rounded
+one-third formula. The displayed value is the current bonus, not a random
+roll. Profile and inventory use the same live formula; a subsequent level
+change updates it without restoring any uses. Zero is displayed as +0.
+
+Bread inventory includes the relative time until the first remaining stack
+expires. No player-facing daily flight deadline is disclosed. Owner planning
+shows expiry risks privately and never promises consumption of absent bread.

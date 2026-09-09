@@ -166,8 +166,8 @@ class SystemdPackagingTests(unittest.TestCase):
             root = Path(temporary)
             source_directory = root / "spool"
             target_directory = root / "public"
-            source_directory.mkdir()
-            target_directory.mkdir()
+            source_directory.mkdir(mode=0o750)
+            target_directory.mkdir(mode=0o750)
             source = source_directory / "ranking.html"
             target = target_directory / "index.html"
             payload = (

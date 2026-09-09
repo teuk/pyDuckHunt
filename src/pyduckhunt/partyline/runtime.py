@@ -12,13 +12,17 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
+from zoneinfo import ZoneInfo
 
+from pyduckhunt.game.bread import active_channel_breads
 from pyduckhunt.configuration import PartylineConfiguration
 from pyduckhunt.game.admin import (
     PlayerAdministrationError,
+    apply_admin_channel_item,
     apply_player_update,
     apply_weapon_control,
 )
+from pyduckhunt.game.catalog import MINUTE_NS
 from pyduckhunt.game.model import (
     FlightKind,
     GameState,
@@ -27,7 +31,8 @@ from pyduckhunt.game.model import (
     Transition,
 )
 from pyduckhunt.game.progression import experience_required
-from pyduckhunt.game.ranking import ranked_players
+from pyduckhunt.game.ranking import is_statistically_excluded, ranked_players
+from pyduckhunt.game.runtime import DAY_NS
 from pyduckhunt.game.targets import flight_reward
 from pyduckhunt.identity import rfc1459_casefold, same_irc_name
 from pyduckhunt.irc.message import IRCMessage, render_notice_bounded, render_privmsg
@@ -62,6 +67,7 @@ BOOTSTRAP_TIMEOUT_NS = 10 * 60 * 1_000_000_000
 IP_FAILURE_WINDOW_NS = 10 * 60 * 1_000_000_000
 MAX_SESSION_FAILURES = 5
 MAX_IP_FAILURES = 15
+PARIS_ZONE = ZoneInfo("Europe/Paris")
 TELNET_IAC = 255
 TELNET_WILL = 251
 TELNET_WONT = 252
@@ -155,6 +161,7 @@ class PartylineController:
         anti_cheat: bool = False,
         integer_source: IntegerSource | None = None,
         ranking_url: str | None = None,
+        statistics_excluded_nicknames: tuple[str, ...] = (),
     ) -> None:
         if not isinstance(configuration, PartylineConfiguration):
             raise ValueError("partyline requires validated configuration")
@@ -186,6 +193,7 @@ class PartylineController:
         self._flight_lifetime_ns = flight_lifetime_ns
         self._integer_source = selected_integers
         self._ranking_url = ranking_url
+        self._statistics_excluded_nicknames = statistics_excluded_nicknames
         self._flight_appearance_source = (
             RandomizedFlightAppearanceSource(selected_integers)
             if anti_cheat
@@ -291,11 +299,26 @@ class PartylineController:
         ):
             self._handle_irc_weapon_command(now_ns, message, private=False)
             return True
+        if self._is_joined_channel(target) and self._is_admin_channel_item_command(text):
+            self._handle_irc_admin_channel_item(now_ns, message)
+            return True
+        if self._is_joined_channel(target) and self._is_duckplanning_command(
+            text,
+            private=False,
+        ):
+            self._handle_irc_duckplanning(now_ns, message, private=False)
+            return True
         if same_irc_name(target, bot_nickname) and self._is_weapon_command(
             text,
             private=True,
         ):
             self._handle_irc_weapon_command(now_ns, message, private=True)
+            return True
+        if same_irc_name(target, bot_nickname) and self._is_duckplanning_command(
+            text,
+            private=True,
+        ):
+            self._handle_irc_duckplanning(now_ns, message, private=True)
             return True
         if not same_irc_name(target, bot_nickname):
             return False
@@ -454,6 +477,157 @@ class PartylineController:
             f"scope={'private' if private else _safe_atom(target)} operation={operation}"
         )
 
+    @staticmethod
+    def _is_admin_channel_item_command(text: str) -> bool:
+        arguments = text.split()
+        return bool(arguments) and arguments[0].casefold() in ("!appeau", "!pain")
+
+    @staticmethod
+    def _is_duckplanning_command(text: str, *, private: bool) -> bool:
+        arguments = text.split()
+        if not arguments:
+            return False
+        accepted = ("duckplanning", "!duckplanning") if private else ("!duckplanning",)
+        return arguments[0].casefold() in accepted
+
+    def _handle_irc_duckplanning(
+        self,
+        now_ns: int,
+        message: IRCMessage,
+        *,
+        private: bool,
+    ) -> None:
+        assert message.nickname is not None
+        _, text = message.params
+        arguments = text.split()
+        command = arguments[0].casefold()
+        owner = self.user_store.owner_for_irc(
+            message.nickname,
+            prefix=message.prefix,
+            account=message.tag("account"),
+        )
+        if owner is None:
+            self._emit(
+                "event=irc-admin-refused "
+                f"nick={_safe_atom(message.nickname)} command={_safe_atom(command)}"
+            )
+            return
+        if len(arguments) != 1:
+            usage = "duckplanning" if private else "!duckplanning"
+            lines = (f"{owner.handle} > Usage : {usage}",)
+        else:
+            lines = self._duckplanning_lines(now_ns)
+        self.runtime.emit_priority(
+            tuple(render_notice_bounded(message.nickname, line) for line in lines)
+        )
+        self._emit(
+            "event=irc-duckplanning "
+            f"actor={_safe_atom(owner.handle)} scope={'private' if private else 'channel'}"
+        )
+
+    def _handle_irc_admin_channel_item(
+        self,
+        now_ns: int,
+        message: IRCMessage,
+    ) -> None:
+        assert message.nickname is not None
+        channel, text = message.params
+        owner = self.user_store.owner_for_irc(
+            message.nickname,
+            prefix=message.prefix,
+            account=message.tag("account"),
+        )
+        arguments = text.split()
+        command = arguments[0].casefold()
+        if owner is None:
+            self._emit(
+                "event=irc-admin-refused "
+                f"nick={_safe_atom(message.nickname)} command={_safe_atom(command)}"
+            )
+            return
+        if len(arguments) != 1:
+            self.runtime.emit_priority(
+                render_wire_notice(
+                    message.nickname,
+                    (f"{owner.handle} > Usage : {command}",),
+                )
+            )
+            return
+        item_id = 20 if command == "!appeau" else 21
+        scheduled_for_ns = (
+            self._integer_source(now_ns + 1, now_ns + 10 * MINUTE_NS)
+            if item_id == 20
+            else None
+        )
+        try:
+            event = ReplayEvent.admin_channel_item(
+                now_ns,
+                owner.handle,
+                item_id,
+                scheduled_for_ns=scheduled_for_ns,
+            )
+            apply_admin_channel_item(
+                self.runtime.state,
+                owner.handle,
+                item_id,
+                now_ns,
+                scheduled_for_ns=scheduled_for_ns,
+            )
+        except (PlayerAdministrationError, ValueError):
+            self.runtime.emit_priority(
+                render_wire_notice(
+                    message.nickname,
+                    (f"{owner.handle} > Action administrative refusée.",),
+                )
+            )
+            return
+
+        def render_reply(transition: Transition) -> tuple[bytes, ...]:
+            if item_id == 20:
+                message_text = (
+                    f"{owner.handle} > Tu utilises un appeau. "
+                    f"Échéance prévue : {_paris(scheduled_for_ns)} "
+                    "(après le vol actif si nécessaire). "
+                    "Le prochain envol quotidien ne change pas."
+                )
+            else:
+                count = sum(
+                    1
+                    for effect in transition.state.effects
+                    if effect.item_id == 21
+                    and effect.key == "channel_bread"
+                    and effect.owner_key is None
+                )
+                bread = "morceau" if count == 1 else "morceaux"
+                message_text = (
+                    f"{owner.handle} > Tu déposes un morceau de pain sur {channel}. "
+                    f"Il y a actuellement {count} {bread} de pain. "
+                    + ("Actif 1h, conservé à chaque envol. Attraction renforcée ; "
+                       f"départ des nouveaux canards retardé de {20 * count}s."
+                       if transition.state.bread_plan_effect_ids is not None else
+                       "Disponible 1h ; un morceau consommé par envol s’il est encore valide. "
+                       "Le prochain envol quotidien ne change pas.")
+                )
+            return render_wire_notice(message.nickname, (message_text,))
+
+        result = self.runtime.dispatch(event, render_reply)
+        if result.status.value == "backpressured" or result.transition is None:
+            self.runtime.emit_priority(
+                render_wire_notice(
+                    message.nickname,
+                    (f"{owner.handle} > Action refusée : persistance occupée.",),
+                )
+            )
+            return
+        self._broadcast(
+            f"*** {owner.handle} used {command} on {channel} from IRC. ***"
+        )
+        self._emit(
+            "event=irc-admin-channel-item "
+            f"actor={_safe_atom(owner.handle)} channel={_safe_atom(channel)} "
+            f"item={item_id}"
+        )
+
     def _handle_irc_ducklaunch(
         self,
         now_ns: int,
@@ -507,6 +681,12 @@ class PartylineController:
         """Broadcast privacy-safe runner facts to authenticated operators."""
 
         if type(message) is not str or not message:
+            return
+        if message.startswith("DUCKPLANNING "):
+            now_ns = max(self.runtime.state.now_ns, self._last_now_ns or 0)
+            self._broadcast("*** Coin duckplanning changed. ***")
+            for line in self._duckplanning_lines(now_ns):
+                self._broadcast(f"*** Coin {line} ***")
             return
         if message.startswith(
             (
@@ -1258,6 +1438,9 @@ class PartylineController:
         elif command == ".game":
             for game_line in self._game_lines(now_ns):
                 self._queue_line(session, game_line)
+        elif command == ".duckplanning" and len(arguments) == 1:
+            for planning_line in self._duckplanning_lines(now_ns):
+                self._queue_line(session, planning_line)
         elif command == ".summary" and len(arguments) == 1:
             for summary_line in self._summary_lines():
                 self._queue_line(session, summary_line)
@@ -1577,16 +1760,139 @@ class PartylineController:
             f"State: players={len(state.players)} effects={len(state.effects)} actions={len(state.scheduled_actions)} curses={len(state.curses)}",
         )
 
+    def _duckplanning_lines(self, now_ns: int) -> tuple[str, ...]:
+        state = self.runtime.state
+        _, _, _, joined_channels = self._network_status()
+        channel = ",".join(joined_channels) if joined_channels else "aucun canal"
+        schedule = state.daily_schedule
+        lines: list[str] = []
+        daily_next_ns: int | None = None
+        if schedule is None:
+            lines.append(f"Duckplanning {channel} — aucun planning quotidien.")
+        else:
+            daily_next_ns = (
+                schedule.day_start_ns + DAY_NS
+                if schedule.next_index >= len(schedule.deadlines_ns)
+                else schedule.deadlines_ns[schedule.next_index]
+            )
+            lines.append(
+                f"Duckplanning {channel} — Europe/Paris — "
+                f"{schedule.next_index}/{len(schedule.deadlines_ns)} "
+                + ("échéances passées du plan actuel." if state.bread_plan_effect_ids is not None
+                   else "créneaux traités.")
+            )
+            entries = tuple(
+                f"{index + 1:02d}{'✓' if index < schedule.next_index else '→' if index == schedule.next_index else '·'}"
+                f"{_paris(deadline)}"
+                for index, deadline in enumerate(schedule.deadlines_ns)
+            )
+            for offset in range(0, len(entries), 6):
+                first = offset + 1
+                last = min(offset + 6, len(entries))
+                lines.append(
+                    f"Vols {first:02d}-{last:02d}: " + " | ".join(entries[offset:last])
+                )
+
+        actions = tuple(
+            sorted(
+                state.scheduled_actions,
+                key=lambda action: (action.due_at_ns, action.action_id),
+            )
+        )
+        active_breads = active_channel_breads(state, now_ns)
+        hourly_bread = state.bread_plan_effect_ids is not None
+        if hourly_bread:
+            lines.append(f"Base=24 vols/jour | pains actifs={len(active_breads)} | "
+                         f"attraction : plan à {24 + min(20, len(active_breads))} créneaux "
+                         "(sans garantie d'envol pendant l'heure).")
+        if state.flight is not None and now_ns < state.flight.expires_at_ns:
+            wake_candidates = tuple(
+                value
+                for value in (daily_next_ns, state.flight.expires_at_ns)
+                if value is not None
+            )
+        else:
+            action_next_ns = None if not actions else actions[0].due_at_ns
+            wake_candidates = tuple(
+                value
+                for value in (daily_next_ns, action_next_ns)
+                if value is not None
+            )
+        if hourly_bread:
+            wake_candidates += tuple(e.expires_at_ns for e in active_breads
+                                     if e.expires_at_ns is not None)
+        wake_ns = min(wake_candidates) if wake_candidates else None
+        flight = (
+            "aucun"
+            if state.flight is None
+            else f"#{state.flight.flight_id} fin={_paris(state.flight.expires_at_ns)}"
+        )
+        lines.append(
+            f"Prochain quotidien={_paris(daily_next_ns)} | réveil effectif={_paris(wake_ns)} "
+            f"| vol={flight}."
+        )
+        lines.append(
+            f"Pains={len(active_breads)} | appeaux/actions={len(actions)} | "
+            + ("aucun pain disponible." if not active_breads else
+               f"pain conservé à chaque envol ; +{20 * len(active_breads)}s aux nouveaux vols."
+               if hourly_bread else "un morceau au plus par envol, uniquement avant son expiration.")
+        )
+        for action in actions:
+            source = state.player(action.source_key or "")
+            actor = "Owner" if source is None else source.nickname
+            label = "appeau" if action.item_id == 20 else "canard mécanique"
+            lines.append(
+                f"Action #{action.action_id}: {label}, auteur={actor}, "
+                f"échéance={_paris(action.due_at_ns)}."
+            )
+        if active_breads:
+            expirations = ", ".join(
+                _paris(effect.expires_at_ns) for effect in active_breads
+            )
+            lines.append(f"Expiration des pains: {expirations}.")
+            # Only actual future flight slots/actions can consume bread. A day
+            # rollover or the end of an existing flight is not a new takeoff.
+            earliest_ns = max(now_ns, state.flight.expires_at_ns) if state.flight else now_ns
+            known_flights = ([] if schedule is None else [
+                deadline for deadline in schedule.deadlines_ns[schedule.next_index:]
+                if deadline >= earliest_ns
+            ])
+            known_flights.extend(max(earliest_ns, action.due_at_ns) for action in actions
+                                 if action.item_id in (20, 23))
+            if known_flights:
+                next_flight_ns = min(known_flights)
+                at_risk = sum(effect.expires_at_ns is not None
+                              and effect.expires_at_ns <= next_flight_ns
+                              for effect in active_breads)
+                if at_risk:
+                    lines.append(
+                        f"Attention : {at_risk}/{len(active_breads)} pain(s) expirent avant "
+                        f"ou à la prochaine échéance d'envol connue ({_paris(next_flight_ns)}). "
+                        + ("L'attraction ne garantit pas un envol avant expiration."
+                           if hourly_bread else "Seul un envol plus tôt pourrait les consommer.")
+                    )
+            else:
+                lines.append("Aucun prochain envol connu avant recalcul." if hourly_bread else
+                             "Aucun prochain envol connu : consommation du pain non garantie.")
+        lines.append("Légende: ✓ échéance passée du plan actuel (pas un bilan de chasse) | → prochain | · à venir."
+                     if hourly_bread else "Légende: ✓ traité | → prochain quotidien | · à venir.")
+        return tuple(lines)
+
     def _summary_lines(self) -> tuple[str, ...]:
         state = self.runtime.state
         _, _, _, joined_channels = self._network_status()
         channel = joined_channels[0] if len(joined_channels) == 1 else None
-        ordered = ranked_players(state, limit=5)
+        ordered = ranked_players(
+            state,
+            limit=5,
+            excluded_nicknames=self._statistics_excluded_nicknames,
+        )
         lines = ["=== Coin · résumé DuckHunt ==="]
         lines.extend(_plain_irc(line) for line in render_ranking(
             state,
             limit=5,
             ranking_url=self._ranking_url,
+            excluded_nicknames=self._statistics_excluded_nicknames,
         ))
         for index, player in enumerate(ordered, start=1):
             lines.append(f"--- #{index} · {player.nickname} ---")
@@ -1601,6 +1907,11 @@ class PartylineController:
             if state.last_shooter_key is None
             else state.player(state.last_shooter_key)
         )
+        if last_shooter is not None and is_statistically_excluded(
+            last_shooter.nickname,
+            excluded_nicknames=self._statistics_excluded_nicknames,
+        ):
+            last_shooter = None
         if last_shooter is None:
             lines.append("Aucun tir enregistré.")
         else:
@@ -2032,6 +2343,14 @@ def _utc(value_ns: int | None) -> str:
     )
 
 
+def _paris(value_ns: int | None) -> str:
+    if value_ns is None:
+        return "aucun"
+    return datetime.fromtimestamp(value_ns / 1_000_000_000, PARIS_ZONE).strftime(
+        "%d/%m %H:%M:%S %Z"
+    )
+
+
 def _field_display(field_name: str, value: object) -> str:
     if field_name == "fatigue_centi":
         return f"{int(value) / 100:.2f}%"
@@ -2066,6 +2385,7 @@ _HELP_LINES = (
     ".status                         Coin, IRC, persistance et sessions",
     ".dccstat                        IP, ports, offres et sessions DCC",
     ".game                           vol, planning et état DuckHunt",
+    ".duckplanning                   les 24 horaires, pains, appeaux et réveil effectif",
     ".summary                        top 5, profils, inventaires et dernier tireur",
     ".duck [#canal]                 lance un canard sans déplacer le planning",
     ".goldenduck [#canal]           lance un canard doré (alias : .golden)",

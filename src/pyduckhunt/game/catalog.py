@@ -231,7 +231,7 @@ SHOP_CATALOG = (
         5,
         GrantKind.EFFECT,
         uses=6,
-        magnitude_min=1,
+        magnitude_min=0,
         magnitude_max=15,
     ),
     ShopItem(

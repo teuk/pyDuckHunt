@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from pyduckhunt.game.bread import active_channel_breads
 from pyduckhunt.game.model import GameState, OutcomeKind
 from pyduckhunt.irc.message import render_irc_message
 from pyduckhunt.irc.transport import IRCTransportState
@@ -161,6 +162,7 @@ class OperatorPilotRunner:
         self._schedule_backpressured = 0
         self._network_failures = 0
         self._last_schedule_fingerprint: tuple[object, ...] | None = None
+        self._last_channel_items_fingerprint: tuple[object, ...] | None = None
         self._last_schedule_report_ns: int | None = None
         self._last_publication_observation = (0, 0)
         self._last_schedule_status = None
@@ -372,11 +374,49 @@ class OperatorPilotRunner:
                 f"band={status.band} progress={status.community_progress} "
                 f"flights={status.flight_count}"
             )
+        if result.plan_expanded and status is not None:
+            self._emit(
+                "SCHEDULE event=plan-expanded "
+                f"day={_format_utc_day(status.day_start_ns)} "
+                f"flights={status.flight_count} cursor={status.next_index}"
+            )
+        if result.plan_replanned and status is not None:
+            self._emit("SCHEDULE event=bread-replanned "
+                f"base=24 bread={len(active_channel_breads(self.scheduling.runtime.state, now_ns))} "
+                f"flights={status.flight_count} next={_format_utc_ns(status.next_deadline_ns)}")
         if backpressured:
             self._emit(
                 "SCHEDULE event=backpressured "
                 f"accepted={accepted} backpressured={backpressured}"
             )
+        if status is not None:
+            runtime_deadline_ns = (
+                status.next_deadline_ns
+                if result.next_deadline_ns is None
+                else result.next_deadline_ns
+            )
+            actions = tuple(
+                (action.action_id, action.item_id, action.due_at_ns)
+                for action in self.scheduling.runtime.state.scheduled_actions
+            )
+            breads = tuple(effect.effect_id for effect in
+                           active_channel_breads(self.scheduling.runtime.state, now_ns))
+            schedule = self.scheduling.runtime.state.daily_schedule
+            channel_items_fingerprint = (actions, breads,
+                None if schedule is None else (schedule.day_start_ns, schedule.deadlines_ns))
+            if channel_items_fingerprint != self._last_channel_items_fingerprint:
+                reason = (
+                    "startup"
+                    if self._last_channel_items_fingerprint is None
+                    else "channel-items-change"
+                )
+                self._emit(
+                    f"DUCKPLANNING reason={reason} "
+                    f"next={_format_utc_ns(status.next_deadline_ns)} "
+                    f"wake={_format_utc_ns(runtime_deadline_ns)} "
+                    f"actions={len(actions)} bread={len(breads)}"
+                )
+                self._last_channel_items_fingerprint = channel_items_fingerprint
         for dispatch in result.dispatches:
             if dispatch.status is not DispatchStatus.ACCEPTED or dispatch.transition is None:
                 continue
@@ -384,6 +424,10 @@ class OperatorPilotRunner:
             for outcome in transition.outcomes:
                 if outcome.kind is OutcomeKind.FLIGHT_STARTED:
                     kind = "unknown" if outcome.flight_kind is None else outcome.flight_kind.value
+                    if outcome.channel_effect_count:
+                        self._emit("BREAD event=flight-delay "
+                            f"pieces={outcome.channel_effect_count} extra_seconds={outcome.effect_magnitude} "
+                            f"flight_id={outcome.flight_id}")
                     self._emit(
                         "SCHEDULE event=flight-started "
                         f"kind={kind} deadline={_format_optional_utc(result.attempted_deadline_ns)} "
@@ -414,11 +458,21 @@ class OperatorPilotRunner:
                 )
         if not self._debug_enabled or status is None:
             return
+        runtime_deadline_ns = (
+            status.next_deadline_ns
+            if result.next_deadline_ns is None
+            else result.next_deadline_ns
+        )
+        pending_actions = len(self.scheduling.runtime.state.scheduled_actions)
+        bread_count = len(active_channel_breads(self.scheduling.runtime.state, now_ns))
         fingerprint = (
             status.day_start_ns,
             status.flight_count,
             status.next_index,
             status.next_deadline_ns,
+            runtime_deadline_ns,
+            pending_actions,
+            bread_count,
             status.recommended_flight_count,
             status.flight_active,
         )
@@ -436,6 +490,8 @@ class OperatorPilotRunner:
             f"recommended={status.recommended_flight_count} "
             f"cursor={status.next_index}/{status.flight_count} "
             f"next={_format_utc_ns(status.next_deadline_ns)} "
+            f"wake={_format_utc_ns(runtime_deadline_ns)} "
+            f"actions={pending_actions} bread={bread_count} "
             f"flight={'active' if status.flight_active else 'none'} "
             f"accepted_total={self._schedule_accepted} "
             f"backpressured_total={self._schedule_backpressured} "

@@ -10,7 +10,8 @@ runtime replay event.
 The resolver receives three narrow sources:
 
 - an inclusive bounded integer source for shot rolls, item magnitudes, action
-  deadlines, thermos targets and ordered standard-loot rolls;
+  deadlines and ordered standard-loot rolls; thermos targets are fixed at -300
+  centi-points and need no entropy;
 - a channel-presence source used only by targeted purchases;
 - an optional incident source returning a complete incident chain.
 
@@ -30,13 +31,17 @@ Shots derive foundational accuracy, weapon reliability, miss penalty, wild-shot
 penalty and silent-weapon behavior from the shooter's current level, then apply
 karma to the resulting base jam risk. A fired bang up to and including three
 seconds after a kill is a late shot: it records the precise millisecond delay,
-pays only the miss penalty and cannot become a wild shot or incident. Once a
-non-silent shot is known to have missed an active target, the resolver settles
-the historically observed 5% noise-escape decision. Hits, late shots, wild
-shots and silent weapons consume no noise draw. The resulting decision is
-stored in the shot attempt, so journal replay never repeats that draw. When the
-player owns an active ammunition
-recycler, the resolver injects one exact roll from 1 through 30 into the shot
+pays only the miss penalty and cannot become a wild shot or incident.
+New live attempts record the Tcl 2.11 threshold of three noisy misses.
+The counter belongs to the active duck and is shared by shooters; each real
+unsuppressed miss counts once, including incident-forced misses. A standard
+duck escapes at the threshold. Golden and mechanical ducks are immune to
+noise escape. Silencers and level-granted silent weapons do not add noise;
+hits, empty/jammed/blocked triggers and late/wild shots do not add misses to
+the active duck. Explosive ammunition counts as one miss, like ordinary ammo.
+No random noise-escape draw is made. Old attempts without this threshold retain
+their recorded escape decision and do not acquire a new counter on replay.
+When the player owns an active ammunition recycler, the resolver injects one exact roll from 1 through 30 into the shot
 event. Explicit policy values remain available as bounded test or simulation
 overrides. An eligible
 standard kill draws the complete catalog roll tuple in fixed order and records

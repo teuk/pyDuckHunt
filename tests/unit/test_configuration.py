@@ -10,6 +10,7 @@ from pyduckhunt.configuration import (
     resolve_irc_server_password,
 )
 from pyduckhunt.irc import IRCTransport
+from pyduckhunt.identity import rfc1459_casefold
 
 
 def configuration_payload() -> dict[str, object]:
@@ -30,7 +31,7 @@ def configuration_payload() -> dict[str, object]:
         },
         "game": {
             "enabled": False,
-            "flights_per_day": 18,
+            "flights_per_day": 24,
             "golden_weight_per_eighteen": 1,
             "flight_lifetime_seconds": 300,
             "unusual_loot_chance_per_thousand": 0,
@@ -56,6 +57,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertFalse(configuration.game.anti_cheat)
         self.assertIsNone(configuration.game.shop_url)
         self.assertIsNone(configuration.game.ranking_url)
+        self.assertEqual(configuration.game.statistics_excluded_nicknames, ())
         self.assertFalse(configuration.partyline.enabled)
         self.assertEqual(configuration.partyline.bind_host, "127.0.0.1")
         self.assertEqual(configuration.partyline.port, 0)
@@ -175,6 +177,20 @@ class ConfigurationTests(unittest.TestCase):
         payload["game"]["unexpected"] = True  # type: ignore[index]
         with self.assertRaises(ValueError):
             parse_application_configuration(payload)
+
+    def test_statistics_exclusions_are_optional_canonical_and_unique(self) -> None:
+        payload = configuration_payload()
+        payload["game"]["statistics_excluded_nicknames"] = ["Te[u]K"]  # type: ignore[index]
+        configuration = parse_application_configuration(payload)
+        self.assertEqual(
+            configuration.game.statistics_excluded_nicknames,
+            (rfc1459_casefold("Te[u]K"),),
+        )
+        for excluded in (["Te[u]K", "te{u}k"], ["bad nick"], "Te[u]K"):
+            invalid = configuration_payload()
+            invalid["game"]["statistics_excluded_nicknames"] = excluded  # type: ignore[index]
+            with self.subTest(excluded=excluded), self.assertRaises(ValueError):
+                parse_application_configuration(invalid)
 
     def test_shop_url_is_optional_disabled_by_default_and_https_only(self) -> None:
         payload = configuration_payload()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from pyduckhunt.game.bread import bread_identifiers, preserved_bread_deadline, MAX_CHANNEL_BREAD
 from pyduckhunt.game.commands import Command, CommandKind
 from pyduckhunt.game.engine import advance_time, apply_command, start_flight
 from pyduckhunt.game.karma import player_karma_basis_points
@@ -31,6 +32,7 @@ FLIGHT_LIFETIME_NS = 300 * SECOND_NS
 DAILY_FLIGHT_COUNT = 18
 GROWTH_DAILY_FLIGHT_COUNT = 21
 BOOTSTRAP_DAILY_FLIGHT_COUNT = 24
+FIXED_DAILY_FLIGHT_COUNT = BOOTSTRAP_DAILY_FLIGHT_COUNT
 BOOTSTRAP_COMMUNITY_HITS_MAX = 24
 GROWTH_COMMUNITY_HITS_MAX = 99
 SUPPORTED_DAILY_FLIGHT_COUNTS = frozenset(
@@ -76,7 +78,7 @@ COMMAND_RATE_LIMITS = {
 GLOBAL_RATE_LIMIT = RateLimit(30, 600 * SECOND_NS)
 
 
-def validate_daily_schedule(day_start_ns: int, deadlines_ns: tuple[int, ...]) -> None:
+def validate_daily_schedule(day_start_ns: int, deadlines_ns: tuple[int, ...], *, allow_bread: bool = False) -> None:
     """Validate one injected exact UTC-day schedule."""
 
     if type(day_start_ns) is not int or day_start_ns < 0:
@@ -85,9 +87,10 @@ def validate_daily_schedule(day_start_ns: int, deadlines_ns: tuple[int, ...]) ->
         raise ValueError("day start must align with a UTC-day boundary")
     if (
         type(deadlines_ns) is not tuple
-        or len(deadlines_ns) not in SUPPORTED_DAILY_FLIGHT_COUNTS
+        or (len(deadlines_ns) not in SUPPORTED_DAILY_FLIGHT_COUNTS
+            and not (allow_bread and 24 <= len(deadlines_ns) <= 24 + MAX_CHANNEL_BREAD))
     ):
-        raise ValueError("daily schedule flight count is outside the adaptive policy")
+        raise ValueError("daily schedule flight count is outside the supported policy")
     if any(type(value) is not int for value in deadlines_ns):
         raise ValueError("daily schedule deadlines must be integers")
     if deadlines_ns != tuple(sorted(set(deadlines_ns))):
@@ -99,12 +102,12 @@ def validate_daily_schedule(day_start_ns: int, deadlines_ns: tuple[int, ...]) ->
         raise ValueError("daily schedule deadline falls outside its UTC day")
 
 
-def validate_daily_schedule_state(schedule: DailySchedule) -> None:
+def validate_daily_schedule_state(schedule: DailySchedule, *, allow_bread: bool = False) -> None:
     """Validate the durable cursor against the exact daily schedule contract."""
 
     if not isinstance(schedule, DailySchedule):
         raise ValueError("daily schedule must satisfy the domain contract")
-    validate_daily_schedule(schedule.day_start_ns, schedule.deadlines_ns)
+    validate_daily_schedule(schedule.day_start_ns, schedule.deadlines_ns, allow_bread=allow_bread)
 
 
 def build_daily_schedule(
@@ -115,7 +118,7 @@ def build_daily_schedule(
     """Turn injected hour and minute choices into one canonical daily plan."""
 
     if type(hours) is not tuple or len(hours) not in SUPPORTED_DAILY_FLIGHT_COUNTS:
-        raise ValueError("schedule hour count is outside the adaptive policy")
+        raise ValueError("schedule hour count is outside the supported policy")
     if type(minutes) is not tuple or len(minutes) != len(hours):
         raise ValueError("schedule requires one injected minute per hour")
     if any(type(value) is not int or not 0 <= value <= 23 for value in hours):
@@ -145,14 +148,52 @@ def community_hunt_progress(state: GameState) -> int:
 
 
 def adaptive_daily_flight_count(state: GameState) -> int:
-    """Select the next UTC day's immutable flight count from durable progress."""
+    """Return the fixed daily policy while retaining the compatibility API."""
 
-    progress = community_hunt_progress(state)
-    if progress <= BOOTSTRAP_COMMUNITY_HITS_MAX:
-        return BOOTSTRAP_DAILY_FLIGHT_COUNT
-    if progress <= GROWTH_COMMUNITY_HITS_MAX:
-        return GROWTH_DAILY_FLIGHT_COUNT
-    return DAILY_FLIGHT_COUNT
+    community_hunt_progress(state)
+    return FIXED_DAILY_FLIGHT_COUNT
+
+
+def expand_daily_schedule(
+    state: GameState,
+    now_ns: int,
+    deadlines_ns: tuple[int, ...],
+) -> Transition:
+    """Durably extend today's legacy plan without changing consumed deadlines."""
+
+    if type(now_ns) is not int or now_ns < 0:
+        raise ValueError("schedule expansion time must be a non-negative integer")
+    validate_daily_schedule_state(state.daily_schedule)
+    current = state.daily_schedule
+    assert current is not None
+    validate_daily_schedule(current.day_start_ns, deadlines_ns)
+    if len(deadlines_ns) != FIXED_DAILY_FLIGHT_COUNT:
+        raise ValueError("schedule expansion must reach the fixed daily count")
+    if not current.day_start_ns <= now_ns < current.day_start_ns + DAY_NS:
+        raise ValueError("daily schedule can only be expanded during its UTC day")
+    if now_ns < state.now_ns:
+        raise ValueError("schedule expansion cannot precede durable game time")
+    if len(deadlines_ns) <= len(current.deadlines_ns):
+        raise ValueError("schedule expansion must add at least one deadline")
+    if not set(current.deadlines_ns).issubset(deadlines_ns):
+        raise ValueError("schedule expansion must preserve every existing deadline")
+    if deadlines_ns[: current.next_index] != current.deadlines_ns[: current.next_index]:
+        raise ValueError("schedule expansion must preserve the consumed prefix")
+    added = set(deadlines_ns) - set(current.deadlines_ns)
+    if any(deadline <= now_ns for deadline in added):
+        raise ValueError("schedule expansion deadlines must be strictly future")
+    advanced = advance_time(state, now_ns)
+    return Transition(
+        state=replace(
+            advanced.state,
+            daily_schedule=DailySchedule(
+                current.day_start_ns,
+                deadlines_ns,
+                current.next_index,
+            ),
+        ),
+        outcomes=advanced.outcomes,
+    )
 
 
 def install_daily_schedule(
@@ -171,7 +212,7 @@ def install_daily_schedule(
     advanced = advance_time(state, now_ns)
     current = advanced.state.daily_schedule
     if current is not None:
-        validate_daily_schedule_state(current)
+        validate_daily_schedule_state(current, allow_bread=state.bread_plan_effect_ids is not None)
         if current.day_start_ns == day_start_ns:
             if current.deadlines_ns != deadlines_ns:
                 raise ValueError("installed day cannot be replaced with different entropy")
@@ -184,9 +225,43 @@ def install_daily_schedule(
         state=replace(
             advanced.state,
             daily_schedule=DailySchedule(day_start_ns, deadlines_ns),
+            bread_plan_effect_ids=(None if advanced.state.bread_plan_effect_ids is None else ()) ,
         ),
         outcomes=advanced.outcomes,
     )
+
+
+def enable_hourly_bread(state: GameState, now_ns: int) -> Transition:
+    # Activate at the durable clock without expiring or replaying a live flight.
+    if now_ns != state.now_ns:
+        raise ValueError("bread activation must use the current durable clock")
+    if state.bread_plan_effect_ids is not None:
+        return Transition(state, ())
+    return Transition(replace(state, bread_plan_effect_ids=()), ())
+
+
+def replan_bread_schedule(state: GameState, now_ns: int, day_start_ns: int,
+                          deadlines_ns: tuple[int, ...]) -> Transition:
+    if state.bread_plan_effect_ids is None:
+        raise ValueError("hourly bread must be enabled before replanning")
+    validate_daily_schedule(day_start_ns, deadlines_ns, allow_bread=True)
+    if not day_start_ns <= now_ns < day_start_ns + DAY_NS:
+        raise ValueError("bread schedule must belong to the current UTC day")
+    identifiers = bread_identifiers(state, now_ns)
+    if len(deadlines_ns) != FIXED_DAILY_FLIGHT_COUNT + min(MAX_CHANNEL_BREAD, len(identifiers)):
+        raise ValueError("bread schedule must match base plus active bread")
+    keep = preserved_bread_deadline(state, now_ns)
+    if keep is not None and keep not in deadlines_ns:
+        raise ValueError("bread replanning must keep the next existing flight")
+    previous = state.daily_schedule
+    if (previous is not None and previous.day_start_ns == day_start_ns
+            and state.bread_plan_effect_ids == identifiers):
+        raise ValueError("unchanged bread must not redraw today's plan")
+    advanced = advance_time(state, now_ns)
+    return Transition(replace(advanced.state,
+        bread_plan_effect_ids=identifiers,
+        daily_schedule=DailySchedule(day_start_ns, deadlines_ns,
+            sum(d <= now_ns for d in deadlines_ns))), advanced.outcomes)
 
 
 def tick_daily_schedule(
@@ -203,7 +278,7 @@ def tick_daily_schedule(
     schedule = advanced.state.daily_schedule
     if schedule is None:
         raise ValueError("schedule tick requires an installed daily schedule")
-    validate_daily_schedule_state(schedule)
+    validate_daily_schedule_state(schedule, allow_bread=state.bread_plan_effect_ids is not None)
     if selection is not None and not isinstance(selection, FlightSelection):
         raise ValueError("schedule selection must satisfy the runtime contract")
 

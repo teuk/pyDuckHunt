@@ -78,6 +78,24 @@ class MetricsPageTests(unittest.TestCase):
             with self.subTest(values=values), self.assertRaises(ValueError):
                 runtime(**values)
 
+    def test_configured_admin_is_absent_from_aggregate_statistics(self) -> None:
+        players = tuple(
+            sorted(
+                (
+                    PlayerState(rfc1459_casefold("Te[u]K"), "Te[u]K", hits=99),
+                    PlayerState(rfc1459_casefold("gaby"), "gaby", hits=12),
+                ),
+                key=lambda player: player.key,
+            )
+        )
+        rendered = render_prometheus_metrics(
+            GameState(now_ns=2_000_000_000, players=players),
+            runtime(),
+            excluded_nicknames=("Te[u]K",),
+        ).decode("ascii")
+        self.assertIn("pyduckhunt_players 1", rendered)
+        self.assertIn("pyduckhunt_hits_total 12", rendered)
+
     def test_publisher_replaces_one_regular_file_atomically(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

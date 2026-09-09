@@ -119,11 +119,39 @@ centi-points. Every fired shot carries a replayed base gain. Burden and frenzy
 multiply that gain in catalog order, the final value is bounded at 100.00, and
 non-firing outcomes such as jams, sabotage and trigger locks add nothing.
 
-Espresso records a concrete relief of at most 5.00. A thermos records the exact
-post-purchase target from 0.00 to 10.00. A targeted tonic records its concrete
+For newly settled live shots, fatigue through 12.00 is free. Each additional
+point subtracts three percentage points from accuracy: 14.00 means -6 points,
+18.00 means -18, and 12.72 means -2.16. The penalty is based on fatigue before
+the shot, so crossing the threshold affects the next shot. Endurance suppresses
+both the penalty and new fatigue while active. Final accuracy is bounded to
+0–100%; the penalty itself is capped at 100 percentage points.
+
+The profile shows base accuracy, the active scope bonus, nuisance/curse
+modifiers and the fatigue penalty, then the final theoretical hit probability.
+For example, level 9 with an 11-point scope and 18 fatigue reads
+`67% +11 pts lunette -18 pts fatigue = 60%`.
+This is separate from historical shot efficiency. Profile and inventory show
+`[fatigué]` whenever the current fatigue penalty is nonzero; fired-shot messages
+show it only when that particular shot was settled with a penalty.
+
+Net experience per duck is current available XP divided by recorded kills;
+purchases and penalties lower it. Fatigue is not an input to the karma formula.
+Effective karma combines the durable hunting counters and the current temporary
+modifier. A simple miss does not directly change karma; accidents, wild shots,
+empty/jammed attempts and compulsive reloads do. The shop's existing limit counts
+three shop requests per ten-minute rolling window, including catalog queries.
+An unsuccessful throttled request does not debit XP or grant an item.
+
+Espresso records a concrete relief of at most 5.00. A newly purchased thermos records a fixed
+post-purchase target of -3.00 (10 XP). Profile, inventory and fired-shot messages
+identify the resulting `[surexcité]` penalty. Each negative fatigue point costs
+three accuracy points: -3.00 gives -9. The fired-shot penalty uses the pre-trigger
+value; subsequent fatigue gains move it toward zero. Endurance suppresses both
+negative- and positive-fatigue penalties. Old thermos targets replay unchanged. A targeted tonic records its concrete
 relief while adding a one-hour accuracy modifier. An infusion immediately adds
 6.00, then removes its exact bounded contribution at the one-hour deadline
-without crossing below zero.
+without crossing below zero; if a thermos has already made fatigue negative,
+expiry leaves that negative value unchanged.
 
 Curses are distinct from shop effects. Each has a catalog key, monotonic
 identifier, owner and exact deadline. All eight catalog entries now compose
@@ -165,3 +193,11 @@ legacy value. Positive karma halves the base weapon-jam risk at +100%, while
 -100% doubles it within the absolute 100% bound. All adjustments use bounded
 integer arithmetic and compose with the abundance amulet before the concrete
 award is written to the journal.
+
+## Scope accuracy explained
+
+The live profile and inventory calculate the equipped scope bonus from the
+current level: floor((100 - base accuracy percent) / 3) whole points. Level 9
+has 67% base accuracy and always gets +11 points before other modifiers. The
+same rule applies to existing scopes even if their historical magnitude was
+random. No purchase, use count or score is changed by displaying the profile.

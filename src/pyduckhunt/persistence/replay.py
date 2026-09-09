@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pyduckhunt.game.admin import apply_player_update, apply_weapon_control
+from pyduckhunt.game.admin import (
+    apply_admin_channel_item,
+    apply_player_update,
+    apply_weapon_control,
+)
 from pyduckhunt.game.commands import Command
 from pyduckhunt.game.engine import advance_time, apply_command, start_flight
 from pyduckhunt.game.model import GameState, Transition
@@ -13,6 +17,9 @@ from pyduckhunt.game.runtime import (
     FlightSelection,
     apply_runtime_command,
     apply_runtime_purchase,
+    expand_daily_schedule,
+    enable_hourly_bread,
+    replan_bread_schedule,
     install_daily_schedule,
     tick_daily_schedule,
 )
@@ -36,6 +43,11 @@ class ReplayResult:
 
 
 def apply_replay_event(state: GameState, event: ReplayEvent) -> Transition:
+    if event.kind is EventKind.ENABLE_HOURLY_BREAD:
+        return enable_hourly_bread(state, event.now_ns)
+    if event.kind is EventKind.REPLAN_BREAD_SCHEDULE:
+        return replan_bread_schedule(state, event.now_ns,
+            event.schedule_day_start_ns, event.schedule_deadlines_ns)
     if event.kind is EventKind.START_FLIGHT:
         assert event.lifetime_ns is not None
         assert event.flight_health is not None
@@ -55,6 +67,12 @@ def apply_replay_event(state: GameState, event: ReplayEvent) -> Transition:
             state,
             event.now_ns,
             event.schedule_day_start_ns,
+            event.schedule_deadlines_ns,
+        )
+    if event.kind is EventKind.EXPAND_DAILY_SCHEDULE:
+        return expand_daily_schedule(
+            state,
+            event.now_ns,
             event.schedule_deadlines_ns,
         )
     if event.kind is EventKind.SCHEDULE_TICK:
@@ -93,6 +111,16 @@ def apply_replay_event(state: GameState, event: ReplayEvent) -> Transition:
             event.nickname,
             event.now_ns,
             operation=event.admin_operation,
+        )
+    if event.kind is EventKind.ADMIN_CHANNEL_ITEM:
+        assert event.admin_actor is not None
+        assert event.item_id is not None
+        return apply_admin_channel_item(
+            state,
+            event.admin_actor,
+            event.item_id,
+            event.now_ns,
+            scheduled_for_ns=event.scheduled_for_ns,
         )
     if event.kind is EventKind.PURCHASE:
         assert event.nickname is not None
@@ -194,7 +222,9 @@ def recover(snapshot_store: SnapshotStore, journal: JournalFile) -> ReplayResult
     )
     if snapshot.journal_digest != expected_digest:
         raise JournalIntegrityError("snapshot does not match the journal chain")
-    if snapshot.source_schema < SCHEMA_VERSION:
+    # Schema 22 only adds an explicit future rule; schema-21 checkpoints
+    # remain authoritative, including operator-imported profiles.
+    if snapshot.source_schema < 21:
         return replay_records(records)
     return replay_records(
         records,

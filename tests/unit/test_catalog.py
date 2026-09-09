@@ -64,7 +64,7 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(shop_item(7).uses, 6)
         self.assertEqual(
             (shop_item(7).magnitude_min, shop_item(7).magnitude_max),
-            (1, 15),
+            (0, 15),
         )
         self.assertEqual(
             (shop_item(10).magnitude_min, shop_item(10).magnitude_max),

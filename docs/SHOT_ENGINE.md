@@ -5,6 +5,18 @@ The critical shot path contains no random generator. Its caller supplies one
 noise policy. Probabilities use integer basis points from 0 to 10000; rolls use
 the closed interval 1 to 10000.
 
+New live settlement records `fatigue_penalty_bps`: three percentage points per
+fatigue point above 12.00, using the pre-shot state, with active endurance
+immunity and a 100-point cap. `game.accuracy.shot_accuracy` composes tonic,
+tremor, glare, the scope bonus and this settled penalty in that order, then
+clamps the result to 0–100%. The renderer uses the same calculation for the
+current profile. Historical attempts without the optional penalty retain zero;
+replay never recomputes their fatigue penalty using a newer policy.
+
+Fired outcomes carry the applied penalty for an accurate `[fatigué]` status.
+The marker does not claim fatigue caused a particular random miss or incident.
+Jams, empty shots and other blocked attempts do not show a fired-shot marker.
+
 ## Settlement order
 
 One shot command is settled in this order:
@@ -37,9 +49,10 @@ One shot command is settled in this order:
 22. after a fired shot, refill an empty weapon from one reserve magazine when
    automatic reload is active.
 
-The effective accuracy, jam risk, damage, remaining health and noise suppression
-decision are explicit outcome fields. Renderers can therefore produce a response
-without reconstructing game logic.
+The effective accuracy, jam risk, active ammunition item, damage, remaining
+health and noise suppression decision are explicit outcome fields. Renderers
+can therefore produce a response without reconstructing game logic or inferring
+ammunition from damage modified by another effect.
 
 ## Replay boundary
 
@@ -62,3 +75,24 @@ probabilities and gains.
 Channel attraction, rendering and flight scheduling have separate ordering
 rules. Random target and loot selection remain outside this transition. The
 engine accepts only a catalog-validated, already-selected target or award.
+
+## Thermos and overexcitation
+
+Live thermos purchases set fatigue to -3.00. Each point below zero costs three
+accuracy points. Settlement records `overexcitation_penalty_bps` separately from
+positive-fatigue penalties, using the pre-shot state; endurance suppresses it.
+The engine applies only the recorded value. `[surexcité]` describes that shot
+even if its subsequent fatigue gain reaches zero. No marker attributes a
+specific miss to this one modifier.
+
+## Calculated scope bonus
+
+New live shots with an equipped scope record `scope_bonus_points`, including
+zero. The formula is floor((10000 - base_accuracy_bps) / 300), giving whole
+percentage points. It uses pre-modifier base accuracy, then adds the bonus
+after tonic, tremor and glare, before fatigue penalties. A successful trigger
+still consumes one of the six uses; blocked and jammed attempts keep their
+existing consumption rules. A level change changes subsequent scope bonuses.
+
+A missing field retains the stored historical scope magnitude, so old replay
+outcomes are never recalculated. An override has no effect without a scope.

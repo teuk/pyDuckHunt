@@ -42,7 +42,7 @@ def configuration(root: Path):
             },
             "game": {
                 "enabled": True,
-                "flights_per_day": 18,
+                "flights_per_day": 24,
                 "golden_weight_per_eighteen": 1,
                 "flight_lifetime_seconds": 300,
                 "unusual_loot_chance_per_thousand": 0,
@@ -126,9 +126,70 @@ class OperatorPilotRunnerIntegrationTests(unittest.TestCase):
             runner._record_schedule(waiting, 9)
             runner._record_schedule(waiting, 10)
             debug = tuple(message for message in observed if message.startswith("DEBUG SCHEDULE"))
+            planning = tuple(
+                message for message in observed if message.startswith("DUCKPLANNING ")
+            )
             self.assertEqual(len(debug), 2)
+            self.assertEqual(len(planning), 1)
+            self.assertIn("reason=startup", planning[0])
+            self.assertIn("actions=0 bread=0", planning[0])
             self.assertIn("reason=change", debug[0])
+            self.assertIn("next=1970-01-01T00:01:00.000Z", debug[0])
+            self.assertIn("wake=1970-01-01T00:01:00.000Z", debug[0])
+            self.assertIn("actions=0 bread=0", debug[0])
             self.assertIn("reason=heartbeat", debug[1])
+            pilot.shell.stop(1, "diagnostic complete")
+
+    def test_bread_expiry_updates_private_observer_without_game_event(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = configuration(root)
+
+            def reject_connection(address: tuple[str, int], timeout: float) -> socket.socket:
+                del address, timeout
+                raise AssertionError("diagnostic runner must not connect")
+
+            pilot = build_development_pilot(
+                config,
+                DevelopmentPilotGate(True, config.irc.endpoint(), ("#pond",)),
+                {},
+                resolver,
+                connector=IRCSocketConnector(config.irc.endpoint(), dialer=reject_connection),
+                snapshot_interval=None,
+            )
+            scheduling = RuntimeSchedulingAdapter(
+                pilot.shell.runtime,
+                config.irc.channels,
+                CalibratedScheduleSource(MinimumIntegerSource()),
+            )
+            observed: list[str] = []
+            runner = OperatorPilotRunner(
+                pilot,
+                scheduling,
+                observer=observed.append,
+                debug_enabled=True,
+                schedule_heartbeat_ns=10,
+            )
+            from dataclasses import replace
+            from pyduckhunt.game.model import ActiveEffect, EffectScope
+            runtime = pilot.shell.runtime
+            runtime._state = replace(runtime.state, next_effect_id=2, effects=(
+                ActiveEffect(1, 21, "channel_bread", EffectScope.CHANNEL,
+                             None, None, 0, expires_at_ns=10),))
+            original = runtime.state
+            status = ScheduleStatus(0, 24, 0, 60_000_000_000, 0, 24, False)
+            waiting = ScheduleStepResult((), 60_000_000_000, status)
+            runner._record_schedule(waiting, 9)
+            runner._record_schedule(waiting, 10)
+            planning = [line for line in observed if line.startswith("DUCKPLANNING ")]
+            debug = [line for line in observed if line.startswith("DEBUG SCHEDULE ")]
+            self.assertEqual(len(planning), 2)
+            self.assertIn("bread=1", planning[0])
+            self.assertIn("bread=0", planning[1])
+            self.assertIn("reason=channel-items-change", planning[1])
+            self.assertIn("reason=change", debug[-1])
+            self.assertIn("bread=0", debug[-1])
+            self.assertIs(runtime.state, original)
             pilot.shell.stop(1, "diagnostic complete")
 
     def test_explicit_run_installs_schedule_and_obeys_operator_stop(self) -> None:
@@ -193,11 +254,12 @@ class OperatorPilotRunnerIntegrationTests(unittest.TestCase):
             self.assertEqual(result.state, ProcessShellState.STOPPED)
             self.assertTrue(runner.telemetry.ready_observed)
             self.assertEqual(runner.telemetry.ready_entries, 1)
-            self.assertEqual(runner.telemetry.schedule_accepted, 1)
+            self.assertEqual(runner.telemetry.schedule_accepted, 2)
             self.assertEqual(runner.telemetry.network_failures, 0)
             self.assertIsNotNone(pilot.shell.runtime.state.daily_schedule)
             records = JournalFile(root / "state" / "events.jsonl").read_records()
-            self.assertEqual(len(records), 1)
+            self.assertEqual(len(records), 2)
+            self.assertEqual(records[0].event.kind.value, "enable_hourly_bread")
 
     def test_stop_requested_before_run_opens_no_stream(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

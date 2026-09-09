@@ -8,6 +8,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from pyduckhunt.game.catalog import GrantKind, shop_item
+from pyduckhunt.game.accuracy import fatigue_penalty_bps, overexcitation_penalty_bps, scope_bonus_points, live_scope_bonus_points
+from pyduckhunt.game.progression import available_experience, spend_experience
+from pyduckhunt.game.model import THERMOS_TARGET_CENTI
 from pyduckhunt.game.commands import CommandKind
 from pyduckhunt.game.engine import advance_time, apply_command, late_shot_delay_ms
 from pyduckhunt.game.karma import (
@@ -48,7 +51,9 @@ IncidentSource = Callable[
 ]
 
 
+# Kept for import compatibility; old events already contain the settled decision.
 HISTORICAL_NOISY_MISS_ESCAPE_BPS = 500
+TCL_NOISY_MISS_LIMIT = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,7 +187,12 @@ class CalibratedEventResolver:
         if item is not None:
             discount = promotion_discount_percent(state, actor.key)
             charged_cost = settled_shop_cost(item.base_cost, discount)
-            if item.requires_magnitude:
+            if item.item_id == 7:
+                debit = max(0, charged_cost - actor.shop_credit)
+                after_payment = (spend_experience(actor, debit).player
+                                 if debit <= available_experience(actor) else actor)
+                magnitude = scope_bonus_points(level_policy(after_payment.level).accuracy_bps)
+            elif item.requires_magnitude:
                 assert item.magnitude_min is not None and item.magnitude_max is not None
                 magnitude = self._draw(item.magnitude_min, item.magnitude_max)
             if item.grant_kind is GrantKind.CHANNEL_ACTION:
@@ -194,10 +204,7 @@ class CalibratedEventResolver:
                 )
             if item.item_id == 25:
                 assert item.fatigue_relief_max is not None
-                fatigue_target_centi = self._draw(
-                    0,
-                    item.fatigue_relief_max * FATIGUE_SCALE,
-                )
+                fatigue_target_centi = THERMOS_TARGET_CENTI
             elif item.fatigue_relief_max is not None:
                 fatigue_player = actor
                 if item.item_id == 27 and target_nickname is not None:
@@ -206,7 +213,7 @@ class CalibratedEventResolver:
                         fatigue_player = target
                 fatigue_relief_centi = min(
                     item.fatigue_relief_max * FATIGUE_SCALE,
-                    fatigue_player.fatigue_centi,
+                    max(0, fatigue_player.fatigue_centi),
                 )
 
         return ReplayEvent.runtime_purchase(
@@ -261,6 +268,9 @@ class CalibratedEventResolver:
                 self._draw(1, 30) if recycler_successes else None
             ),
             frighten_on_miss=self.policy.frighten_on_miss is True,
+            noisy_miss_limit=(TCL_NOISY_MISS_LIMIT
+                              if self.policy.frighten_on_miss is None and not calibrated.silent
+                              else None),
             miss_penalty=(
                 calibrated.miss_penalty
                 if self.policy.miss_penalty is None
@@ -272,7 +282,11 @@ class CalibratedEventResolver:
                 else self.policy.wild_penalty
             ),
             fatigue_gain_centi=self.policy.fatigue_gain_centi,
+            fatigue_penalty_bps=(0 if player is None else fatigue_penalty_bps(state, player)),
+            overexcitation_penalty_bps=(0 if player is None else overexcitation_penalty_bps(state, player)),
         )
+        if player is not None and live_scope_bonus_points(state, player) is not None:
+            attempt = replace(attempt, scope_bonus_points=scope_bonus_points(attempt.base_accuracy_bps))
         unerring = _active_curse(
             state,
             context.nickname,
@@ -294,27 +308,6 @@ class CalibratedEventResolver:
             incident = self._resolve_incident(state, context, attempt, required=False)
             if incident is not None:
                 attempt = replace(attempt, incident=incident)
-                preview = apply_command(
-                    state,
-                    context.nickname,
-                    context.command,
-                    context.now_ns,
-                    shot_attempt=attempt,
-                )
-        if (
-            self.policy.frighten_on_miss is None
-            and not calibrated.silent
-            and attempt.incident is None
-            and _missed_active_flight(preview)
-        ):
-            attempt = replace(
-                attempt,
-                frighten_on_miss=(
-                    self._draw(1, 10_000)
-                    <= HISTORICAL_NOISY_MISS_ESCAPE_BPS
-                ),
-            )
-            if attempt.frighten_on_miss:
                 preview = apply_command(
                     state,
                     context.nickname,
@@ -388,7 +381,10 @@ class CalibratedEventResolver:
                 karma_basis_points=karma,
             ):
                 item = shop_item(spec.item_id) if spec.item_id is not None else None
-                if item is not None and item.requires_magnitude:
+                if item is not None and item.item_id == 7:
+                    owner = _resolved_player(state, context.nickname)
+                    magnitude = scope_bonus_points(level_policy(owner.level).accuracy_bps)
+                elif item is not None and item.requires_magnitude:
                     assert item.magnitude_min is not None
                     assert item.magnitude_max is not None
                     magnitude = self._draw(item.magnitude_min, item.magnitude_max)

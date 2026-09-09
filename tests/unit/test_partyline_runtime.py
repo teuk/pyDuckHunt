@@ -5,6 +5,7 @@ import socket
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from pyduckhunt.configuration import PartylineConfiguration
 from pyduckhunt.game.model import (
@@ -499,6 +500,19 @@ class PartylineRuntimeTests(unittest.TestCase):
         self.assertEqual(rendered.count("[Inventaire]"), 6)
         self.assertNotIn("\x03", rendered)
 
+        self.controller._statistics_excluded_nicknames = ("Alpha",)
+        excluded = "\n".join(self.controller._summary_lines())
+        self.assertNotIn("--- #1 · Alpha ---", excluded)
+        self.assertIn("--- #1 · Bravo ---", excluded)
+
+        self.runtime._state = GameState(
+            players=players,
+            last_shooter_key="alpha",
+        )
+        excluded_last = "\n".join(self.controller._summary_lines())
+        self.assertNotIn("=== Dernier tireur ===\n--- Alpha", excluded_last)
+        self.assertIn("=== Dernier tireur ===\nAucun tir enregistré.", excluded_last)
+
     def test_irc_weapon_control_requires_the_registered_partyline_owner(self) -> None:
         self._bootstrap_over_offered_dcc("owner weapon control password")
         spoof = parse_irc_line(
@@ -567,6 +581,173 @@ class PartylineRuntimeTests(unittest.TestCase):
             [record.event.kind for record in self.journal.read_records()],
             [EventKind.ADMIN_WEAPON_CONTROL] * 5,
         )
+
+    def test_owner_channel_items_are_free_replayable_and_admin_only(self) -> None:
+        self._bootstrap_over_offered_dcc("owner channel item password")
+        spoof = parse_irc_line(
+            "@account=Other :Op[e]rator!user@trusted.example PRIVMSG #marsh :!pain"
+        )
+        before_wires = len(self.wires)
+        self.assertTrue(self.controller.handle_irc(20, spoof, "Coin"))
+        self.assertEqual(len(self.runtime.state.effects), 1)
+        self.assertEqual(len(self.wires), before_wires)
+
+        pain = parse_irc_line(
+            "@account=Operator :ChangedNick!elsewhere@changed PRIVMSG #marsh :!pain"
+        )
+        self.assertTrue(self.controller.handle_irc(21, pain, "Coin"))
+        self.assertEqual(len(self.runtime.state.players), 1)
+        self.assertEqual(
+            sum(effect.item_id == 21 for effect in self.runtime.state.effects),
+            1,
+        )
+        self.assertIn("déposes un morceau de pain".encode(), self.wires[-1][0])
+        self.assertTrue(all(wire.startswith(b"NOTICE ChangedNick :") for wire in self.wires[-1]))
+        self.assertIn(b"prochain envol quotidien ne change pas", self.wires[-1][0])
+
+        appeau = parse_irc_line(
+            "@account=Operator :AnotherNick!elsewhere@changed PRIVMSG #marsh :!appeau"
+        )
+        self.assertTrue(self.controller.handle_irc(22, appeau, "Coin"))
+        self.assertEqual(len(self.runtime.state.players), 1)
+        self.assertEqual(self.runtime.state.scheduled_actions[-1].item_id, 20)
+        self.assertEqual(
+            self.runtime.state.scheduled_actions[-1].due_at_ns,
+            22 + 10 * 60 * 1_000_000_000,
+        )
+        self.assertTrue(all(wire.startswith(b"NOTICE AnotherNick :") for wire in self.wires[-1]))
+        self.assertIn(b"01/01 01:10:00 CET", self.wires[-1][0])
+        self.assertIn(b"prochain envol quotidien ne change pas", self.wires[-1][0])
+
+        malformed = parse_irc_line(
+            "@account=Operator :Op[e]rator!elsewhere@changed PRIVMSG #marsh :!pain extra"
+        )
+        self.assertTrue(self.controller.handle_irc(23, malformed, "Coin"))
+        self.assertIn(b"Usage : !pain", self.wires[-1][0])
+        self.assertTrue(all(wire.startswith(b"NOTICE Op[e]rator :") for wire in self.wires[-1]))
+        self.assertTrue(all(
+            wire.startswith(b"NOTICE ")
+            for batch in self.wires[before_wires:] for wire in batch
+        ))
+        self.runtime.persistence.flush(2)
+        self.assertEqual(
+            [record.event.kind for record in self.journal.read_records()],
+            [EventKind.ADMIN_CHANNEL_ITEM, EventKind.ADMIN_CHANNEL_ITEM],
+        )
+
+    def test_owner_item_rejections_remain_private_without_mutating_state(self) -> None:
+        self._bootstrap_over_offered_dcc("private rejection password")
+        original = self.runtime.state
+        for command in ("!pain", "!appeau"):
+            message = parse_irc_line(
+                "@account=Operator :ChangedNick!elsewhere@changed "
+                f"PRIVMSG #marsh :{command}"
+            )
+            for refusal in ("validation", "backpressure"):
+                with self.subTest(command=command, refusal=refusal):
+                    before = len(self.wires)
+                    if refusal == "validation":
+                        gate = patch(
+                            "pyduckhunt.partyline.runtime.apply_admin_channel_item",
+                            side_effect=ValueError("invalid item"),
+                        )
+                    else:
+                        gate = patch.object(self.runtime.persistence, "reserve", return_value=None)
+                    with gate:
+                        self.assertTrue(self.controller.handle_irc(20, message, "Coin"))
+                    replies = tuple(wire for batch in self.wires[before:] for wire in batch)
+                    self.assertTrue(replies)
+                    self.assertTrue(all(wire.startswith(b"NOTICE ChangedNick :") for wire in replies))
+                    self.assertEqual(self.runtime.state, original)
+        self.runtime.persistence.flush(2)
+        self.assertEqual(self.journal.read_records(), ())
+
+    def test_hourly_owner_bread_is_private_and_delays_without_consumption(self) -> None:
+        from pyduckhunt.persistence.event import ReplayEvent
+        self.runtime.dispatch(ReplayEvent.enable_hourly_bread(self.runtime.state.now_ns), lambda t: ())
+        dcc = self._bootstrap_over_offered_dcc("hourly owner bread password")
+        message = parse_irc_line(
+            "@account=Operator :ChangedNick!elsewhere@changed PRIVMSG #marsh :!pain")
+        before = len(self.wires)
+        self.controller.handle_irc(20, message, "Coin")
+        replies = tuple(wire for batch in self.wires[before:] for wire in batch)
+        self.assertTrue(replies)
+        self.assertTrue(all(wire.startswith(b"NOTICE ChangedNick :") for wire in replies))
+        self.assertIn(b"Actif 1h", b" ".join(replies))
+        self.assertIn("conservé".encode(), b" ".join(replies))
+        self.runtime.dispatch(ReplayEvent.start_flight(21, 300_000_000_000), lambda t: ())
+        self.assertEqual(self.runtime.state.flight.expires_at_ns, 21 + 320_000_000_000)
+        self.assertTrue(any(e.item_id == 21 for e in self.runtime.state.effects))
+        dcc.sendall(b".duckplanning\n")
+        self._poll_twice(22)
+        self.assertIn("pain conservé".encode(), drain(dcc))
+
+    def test_duckplanning_is_owner_private_complete_and_partyline_live(self) -> None:
+        dcc = self._bootstrap_over_offered_dcc("owner duckplanning password")
+        self.runtime._state = GameState(
+            daily_schedule=DailySchedule(
+                day_start_ns=0,
+                deadlines_ns=tuple(
+                    index * 3_600_000_000_000 + 1_800_000_000_000
+                    for index in range(24)
+                ),
+                next_index=9,
+            ),
+            effects=self.runtime.state.effects,
+            next_effect_id=self.runtime.state.next_effect_id,
+            players=self.runtime.state.players,
+        )
+
+        before = len(self.wires)
+        channel = parse_irc_line(
+            "@account=Operator :ChangedNick!elsewhere@changed "
+            "PRIVMSG #marsh :!duckplanning"
+        )
+        self.assertTrue(self.controller.handle_irc(20, channel, "Coin"))
+        channel_wires = tuple(wire for batch in self.wires[before:] for wire in batch)
+        self.assertTrue(channel_wires)
+        self.assertTrue(all(wire.startswith(b"NOTICE ChangedNick :") for wire in channel_wires))
+        rendered = b" ".join(channel_wires)
+        self.assertIn(b"9/24", rendered)
+        self.assertIn(b"Vols 01-06", rendered)
+        self.assertIn(b"Vols 19-24", rendered)
+        self.assertIn(b"24", rendered)
+        self.assertIn(b"Europe/Paris", rendered)
+        self.assertIn(b"Prochain quotidien", rendered)
+
+        private = parse_irc_line(
+            "@account=Operator :YetAnotherNick!elsewhere@changed "
+            "PRIVMSG Coin :duckplanning"
+        )
+        before = len(self.wires)
+        self.assertTrue(self.controller.handle_irc(21, private, "Coin"))
+        private_wires = tuple(wire for batch in self.wires[before:] for wire in batch)
+        self.assertTrue(private_wires)
+        self.assertTrue(all(wire.startswith(b"NOTICE YetAnotherNick :") for wire in private_wires))
+
+        spoof = parse_irc_line(
+            "@account=Other :ChangedNick!elsewhere@changed "
+            "PRIVMSG #marsh :!duckplanning"
+        )
+        before = len(self.wires)
+        self.assertTrue(self.controller.handle_irc(22, spoof, "Coin"))
+        self.assertEqual(len(self.wires), before)
+
+        dcc.sendall(b".duckplanning\n")
+        self._poll_twice(23)
+        partyline = drain(dcc)
+        self.assertIn(b"Duckplanning #marsh", partyline)
+        self.assertIn(b"Vols 19-24", partyline)
+
+        self.controller.observe_runtime(
+            "DUCKPLANNING reason=channel-items-change actions=1 bread=2"
+        )
+        self._poll_twice(24)
+        automatic = drain(dcc)
+        self.assertIn(b"duckplanning changed", automatic)
+        self.assertIn(b"Vols 01-06", automatic)
+        self.assertIn(b"Pains=", automatic)
+        self.assertEqual(len(self.wires), before)
 
     def test_manual_launch_requires_an_unambiguous_joined_channel(self) -> None:
         dcc = self._bootstrap_over_offered_dcc("one more private password")

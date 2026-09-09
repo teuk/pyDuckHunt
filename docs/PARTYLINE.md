@@ -143,7 +143,7 @@ appearance. A disconnected bot, missing channel, active flight or persistence
 backpressure skips that occurrence and draws a new full interval; it never
 polls aggressively or catches up with a burst. This transient timer changes no
 durable daily-schedule cursor, while the accepted flight itself uses the same
-journaled transition, bread consumption and detector notices as `.duck`.
+journaled transition, bread lifetime effects and detector notices as `.duck`.
 
 ## Replayable player administration
 
@@ -182,15 +182,18 @@ least 12 characters. No password is written to application logs.
 
 ## Owner commands on IRC
 
-The partyline owner may issue two narrowly scoped commands in a channel Coin is
+The partyline owner may issue these narrowly scoped commands in a channel Coin is
 currently joined to:
 
 ```text
 !rearm <nick>
 !unarm [-permanent] <nick>
+!pain
+!appeau
+!duckplanning
 ```
 
-The same controls are available by private message, without the public-command
+The weapon controls are also available by private message, without the public-command
 prefix:
 
 ```text
@@ -210,6 +213,29 @@ the owner sends `!rearm`. Accepted changes reserve persistence before mutation,
 carry the owner handle in an `admin_weapon_control` journal event, broadcast to
 the partyline and acknowledge the result in the IRC channel or by private
 NOTICE, matching the command scope.
+
+`!pain` adds one stack of the same one-hour channel bread as `!shop 21`.
+`!appeau` schedules the same within-ten-minutes duck call as `!shop 20`.
+Neither command charges XP or creates a player profile. Bread updates attraction
+and redraws the plan; a duck call keeps its separate scheduled deadline. Each accepted action is attributed to the authenticated owner in an
+`admin_channel_item` journal event; unauthorized attempts remain silent.
+Both commands always acknowledge privately by NOTICE to the current authenticated
+sender nickname, including usage and refusal messages. The exact call deadline
+is shown only to the Owner in Europe/Paris time and can be deferred by an active
+flight. Channel observers receive no administrative item acknowledgement.
+
+Player purchases `!shop 20` and `!shop 21` retain public gameplay confirmations.
+An appeau reports only an approximate ten-minute window, as in Tcl 2.11; it never
+reveals a timestamp or the daily schedule. Live hourly bread remains in place at takeoff; no consumption message is emitted. Inventory and catalog queries remain
+private notices without exposing pending call deadlines.
+
+`!duckplanning` is accepted only from the registered Owner in a joined channel
+and always answers privately by NOTICE. `/msg Coin duckplanning` provides the
+same private view. It lists every daily flight in Europe/Paris time, the daily
+cursor, effective runtime wake-up, active flight, bread stacks and every pending
+duck call. The partyline command `.duckplanning` renders the same view. Coin
+also broadcasts the refreshed view to authenticated partyline sessions whenever
+the durable bread or channel-action set changes.
 
 The same owner identity may launch a flight privately:
 
@@ -252,3 +278,10 @@ hours. Enabling the partyline requires at least one bootstrap identity. The list
 before the IRC adapter and any bind failure stops startup rather than silently
 running without the expected administration path. Shutdown closes partyline
 and DCC sockets before persistence is drained.
+
+With hourly bread enabled, `duckplanning` lists every time in the current plan,
+its 24-slot base and active-bread contribution. Passed times refer to the current
+redraw, not to a retrospective count of actual launches. Bread expiry appears
+in the effective wake-up time. Addition and expiration automatically refresh
+the private partyline plan. Owner `!pain` explains the one-hour lifetime and the
+20-second per-piece extension of subsequent flights, in private NOTICE only.

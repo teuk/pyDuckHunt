@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from pyduckhunt.game.bread import active_channel_breads, BREAD_DELAY_NS
 from pyduckhunt.game.commands import Command, CommandKind
 from pyduckhunt.game.model import (
     ActiveCurse,
@@ -25,6 +26,7 @@ from pyduckhunt.game.model import (
 )
 from pyduckhunt.game.catalog import HOUR_NS, MINUTE_NS, validate_active_effect
 from pyduckhunt.game.loot import acquire_loot, validate_loot_award
+from pyduckhunt.game.accuracy import shot_accuracy
 from pyduckhunt.game.karma import decay_karma_modifier
 from pyduckhunt.game.inventory import item_quantity
 from pyduckhunt.game.targets import flight_reward, validate_flight_reward
@@ -92,7 +94,7 @@ def _advance(state: GameState, now_ns: int) -> Transition:
                 owner = players[effect.owner_key]
                 fatigue_changed_centi = -min(
                     effect.magnitude or 0,
-                    owner.fatigue_centi,
+                    max(0, owner.fatigue_centi),
                 )
                 expired_player = replace(
                     owner,
@@ -124,7 +126,11 @@ def _advance(state: GameState, now_ns: int) -> Transition:
     pending_actions = []
     due_actions = []
     for action in state.scheduled_actions:
-        if now_ns >= action.due_at_ns:
+        if state.bread_plan_effect_ids is not None and action.item_id in (20, 23):
+            # Channel calls wait durably until a matching flight really starts.
+            # A bread expiry/replan must never discard a pending paid call.
+            pending_actions.append(action)
+        elif now_ns >= action.due_at_ns:
             due_actions.append(action)
         else:
             pending_actions.append(action)
@@ -185,10 +191,13 @@ def start_flight(
             + (Outcome(OutcomeKind.FLIGHT_ALREADY_ACTIVE, flight_id=current.flight.flight_id),),
         )
 
+    hourly_bread = current.bread_plan_effect_ids is not None
+    bread_delay_ns = (len(active_channel_breads(current, now_ns)) * BREAD_DELAY_NS
+                      if hourly_bread else 0)
     flight = FlightState(
         flight_id=current.next_flight_id,
         spawned_at_ns=now_ns,
-        expires_at_ns=now_ns + lifetime_ns,
+        expires_at_ns=now_ns + lifetime_ns + bread_delay_ns,
         health=health,
         max_health=health,
         kind=kind,
@@ -203,7 +212,7 @@ def start_flight(
         (
             effect
             for effect in next_state.effects
-            if effect.item_id == 21
+            if not hourly_bread and effect.item_id == 21
             and effect.key == "channel_bread"
             and effect.scope is EffectScope.CHANNEL
             and effect.owner_key is None
@@ -241,6 +250,19 @@ def start_flight(
         else:
             retained_effects.append(effect)
     next_state = replace(next_state, effects=tuple(retained_effects))
+    action_outcomes = ()
+    if hourly_bread:
+        matching_item = 23 if kind is FlightKind.MECHANICAL else 20 if kind is FlightKind.STANDARD else None
+        action = min((a for a in next_state.scheduled_actions
+                      if a.item_id == matching_item and a.due_at_ns <= now_ns),
+                     key=lambda a: (a.due_at_ns, a.action_id), default=None)
+        if action is not None:
+            source = next_state.player(action.source_key)
+            next_state = replace(next_state, scheduled_actions=tuple(
+                a for a in next_state.scheduled_actions if a.action_id != action.action_id))
+            action_outcomes = (Outcome(OutcomeKind.CHANNEL_ACTION_DUE,
+                actor=None if source is None else source.nickname, item_id=action.item_id,
+                action_id=action.action_id, due_at_ns=action.due_at_ns),)
     return Transition(
         state=next_state,
         outcomes=advanced.outcomes
@@ -249,10 +271,13 @@ def start_flight(
                 OutcomeKind.FLIGHT_STARTED,
                 flight_id=flight.flight_id,
                 flight_kind=flight.kind,
+                channel_effect_count=(len(active_channel_breads(current, now_ns)) or None) if hourly_bread else None,
+                effect_magnitude=bread_delay_ns // 1_000_000_000 if hourly_bread else None,
             ),
         )
         + consumed
-        + tuple(alerts),
+        + tuple(alerts)
+        + action_outcomes,
     )
 
 
@@ -781,13 +806,11 @@ def apply_command(
     charm = _owned_effect(current, player.key, 10)
     penetrating = _owned_effect(current, player.key, 3)
     explosive = _owned_effect(current, player.key, 4)
-    tonic = _owned_effect(current, player.key, 27)
     baker = _owned_effect(current, player.key, 112)
     prankster = _owned_effect(current, player.key, 113)
     confusion = _owned_curse(current, player.key, "confusion")
     decay = _owned_curse(current, player.key, "decay")
     frenzy = _owned_curse(current, player.key, "frenzy")
-    tremor = _owned_curse(current, player.key, "tremor")
     unerring_miss = _owned_curse(current, player.key, "unerring_miss")
     recycler_successes = ammunition_recycler_successes_per_thirty(
         current,
@@ -807,19 +830,17 @@ def apply_command(
         effective_jam_bps = min(10_000, effective_jam_bps * 2)
     if grease is not None or permanent_grease:
         effective_jam_bps //= 2
-    accuracy_bonus_percent = 0 if scope is None else scope.magnitude or 0
-    base_accuracy_bps = attempt.base_accuracy_bps
-    if tonic is not None:
-        base_accuracy_bps = base_accuracy_bps * 90 // 100
-    if tremor is not None:
-        base_accuracy_bps = (
-            base_accuracy_bps * (100 - (tremor.magnitude or 0)) // 100
-        )
-    if glare is not None:
-        base_accuracy_bps //= 2
-    effective_accuracy_bps = min(
-        10_000,
-        base_accuracy_bps + accuracy_bonus_percent * 100,
+    accuracy_bonus_percent = (0 if scope is None else
+        (scope.magnitude or 0) if attempt.scope_bonus_points is None else attempt.scope_bonus_points)
+    accuracy = shot_accuracy(
+        current, player, attempt.base_accuracy_bps,
+        settled_fatigue_penalty_bps=attempt.fatigue_penalty_bps,
+        settled_overexcitation_penalty_bps=attempt.overexcitation_penalty_bps,
+        settled_scope_bonus_points=attempt.scope_bonus_points,
+    )
+    effective_accuracy_bps = accuracy.effective_bps
+    ammunition_item_id = (
+        4 if explosive is not None else 3 if penetrating is not None else None
     )
     damage = 3 if explosive is not None else 2 if penetrating is not None else 1
     if frenzy is not None:
@@ -939,6 +960,8 @@ def apply_command(
                 rounds_consumed=rounds_consumed,
                 ammunition_recycled=ammunition_recycled,
                 fatigue_changed_centi=fatigue_changed_centi,
+                fatigue_penalty_bps=attempt.fatigue_penalty_bps,
+                overexcitation_penalty_bps=attempt.overexcitation_penalty_bps,
                 accuracy_bonus_percent=accuracy_bonus_percent,
                 effective_accuracy_bps=effective_accuracy_bps,
                 effective_jam_bps=effective_jam_bps,
@@ -972,6 +995,8 @@ def apply_command(
                 rounds_consumed=rounds_consumed,
                 ammunition_recycled=ammunition_recycled,
                 fatigue_changed_centi=fatigue_changed_centi,
+                fatigue_penalty_bps=attempt.fatigue_penalty_bps,
+                overexcitation_penalty_bps=attempt.overexcitation_penalty_bps,
                 accuracy_bonus_percent=accuracy_bonus_percent,
                 effective_accuracy_bps=effective_accuracy_bps,
                 effective_jam_bps=effective_jam_bps,
@@ -1001,7 +1026,14 @@ def apply_command(
             attempt,
             wild=False,
         )
-        noise_suppressed = attempt.frighten_on_miss and suppressor is not None
+        counted_noise = attempt.noisy_miss_limit is not None
+        noise_suppressed = (counted_noise or attempt.frighten_on_miss) and suppressor is not None
+        frightened_by_miss = attempt.frighten_on_miss and suppressor is None
+        if counted_noise and suppressor is None:
+            flight = replace(current.flight, noisy_misses=(current.flight.noisy_misses or 0) + 1)
+            current = replace(current, flight=flight)
+            frightened_by_miss = (flight.kind is FlightKind.STANDARD
+                                  and flight.noisy_misses >= attempt.noisy_miss_limit)
         outcomes.append(
             Outcome(
                 OutcomeKind.MISS,
@@ -1012,6 +1044,8 @@ def apply_command(
                 rounds_consumed=rounds_consumed,
                 ammunition_recycled=ammunition_recycled,
                 fatigue_changed_centi=fatigue_changed_centi,
+                fatigue_penalty_bps=attempt.fatigue_penalty_bps,
+                overexcitation_penalty_bps=attempt.overexcitation_penalty_bps,
                 accuracy_bonus_percent=accuracy_bonus_percent,
                 effective_accuracy_bps=effective_accuracy_bps,
                 effective_jam_bps=effective_jam_bps,
@@ -1031,7 +1065,7 @@ def apply_command(
                 attempt.incident,
             )
             outcomes.extend(incident_outcomes)
-        if attempt.frighten_on_miss and suppressor is None:
+        if frightened_by_miss:
             frightened = current.flight
             flight_id = frightened.flight_id
             current = replace(
@@ -1070,7 +1104,10 @@ def apply_command(
                 player=player,
                 rounds_consumed=rounds_consumed,
                 ammunition_recycled=ammunition_recycled,
+                ammunition_item_id=ammunition_item_id,
                 fatigue_changed_centi=fatigue_changed_centi,
+                fatigue_penalty_bps=attempt.fatigue_penalty_bps,
+                overexcitation_penalty_bps=attempt.overexcitation_penalty_bps,
                 damage_dealt=damage,
                 remaining_health=remaining_health,
                 accuracy_bonus_percent=accuracy_bonus_percent,
@@ -1145,7 +1182,10 @@ def apply_command(
             player=player,
             rounds_consumed=rounds_consumed,
             ammunition_recycled=ammunition_recycled,
+            ammunition_item_id=ammunition_item_id,
             fatigue_changed_centi=fatigue_changed_centi,
+            fatigue_penalty_bps=attempt.fatigue_penalty_bps,
+            overexcitation_penalty_bps=attempt.overexcitation_penalty_bps,
             experience_awarded=experience_awarded,
             levels_gained=progression.levels_gained,
             damage_dealt=damage,

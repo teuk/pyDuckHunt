@@ -169,27 +169,37 @@ class PartylineUserStore:
     ) -> PartylineUser | None:
         """Resolve an IRC identity to its stored owner without trusting nick alone."""
 
-        user = self.find(nickname)
-        if user is None or user.role != "owner":
+        if type(nickname) is not str:
             return None
+        owners = tuple(user for user in self.users() if user.role == "owner")
         normalized_account = None if account in (None, "*") else account
         if normalized_account is not None:
-            if user.irc_account is None or not hmac.compare_digest(
-                normalized_account.casefold(),
-                user.irc_account.casefold(),
-            ):
-                return None
-            return user
-        if prefix is None or user.irc_mask is None:
-            return None
-        return (
-            user
-            if hmac.compare_digest(
-                rfc1459_casefold(prefix),
-                rfc1459_casefold(user.irc_mask),
+            matches = tuple(
+                user
+                for user in owners
+                if user.irc_account is not None
+                and hmac.compare_digest(
+                    normalized_account.casefold(),
+                    user.irc_account.casefold(),
+                )
             )
-            else None
+            return matches[0] if len(matches) == 1 else None
+        if prefix is None:
+            return None
+        _, separator, identity = prefix.partition("!")
+        if not separator or "@" not in identity:
+            return None
+        matches = tuple(
+            user
+            for user in owners
+            if user.irc_mask is not None
+            and "!" in user.irc_mask
+            and hmac.compare_digest(
+                rfc1459_casefold(identity),
+                rfc1459_casefold(user.irc_mask.partition("!")[2]),
+            )
         )
+        return matches[0] if len(matches) == 1 else None
 
     def create_first_owner(
         self,

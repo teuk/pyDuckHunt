@@ -4,6 +4,15 @@ pyDuckHunt uses a versioned append-only journal and periodic atomic snapshots.
 Both formats contain only game state and synthetic identifiers; runtime secrets
 and raw IRC traffic never belong in either format.
 
+Shot attempts may include `fatigue_penalty_bps`, an integer from 0 to 10000.
+New live settlement records nonzero penalties; zero is omitted so previous
+canonical event bodies and their digest chains remain byte-for-byte stable.
+Missing values decode to zero and preserve historical outcomes. No snapshot
+field, player counter or existing journal entry is rewritten by this change.
+Once a nonzero penalty is journaled, recovery requires this reader or a newer
+compatible one. An installer must not restore an older reader after the durable
+state has advanced; preserving new gameplay takes precedence over source rollback.
+
 ## Priority boundary
 
 Disk durability is deliberately outside the latency-sensitive response path.
@@ -57,6 +66,12 @@ fails queued tickets and prevents further admission. See
 `docs/RUNTIME_LIFECYCLE.md` for the complete contract.
 
 ## Prerelease schema
+
+Schema 21 adds `admin_channel_item` events for owner-provided bread and duck
+calls. They preserve the authenticated owner handle, exact shop item and the
+already-drawn call deadline, while deliberately carrying no player identity or
+XP debit. Channel actions may therefore have no player source; schema 20 and
+older actions retain their required player source unchanged.
 
 Schema 20 adds exact fired-shot, newly-created-jam and spent-experience counters
 to each player. Every source event already contains the deterministic shot or
@@ -113,7 +128,7 @@ golden-hit counter, complete flight identity, bounded reward effects and nested
 post-kill loot awards. Shot gains, shop relief or targets, command-delay
 settlement, scheduled channel actions and active curses remain explicit.
 
-Runtime recovery adds the complete adaptive UTC-day plan, its next
+Runtime recovery adds the complete fixed 24-flight UTC-day plan, its next
 unconsumed index and bounded command-window expirations. Schedule installation,
 schedule ticks, public commands and public purchases have distinct replay
 events. A tick carries the concrete flight selection when one was dispatched;
@@ -124,3 +139,50 @@ in the current schema.
 
 The asynchronous worker changes runtime ownership only. It does not change the
 canonical event or snapshot field set.
+
+## Negative fatigue and legacy thermos purchases
+
+Players now admit fixed-point fatigue from -300 to 10000. New live thermos
+targets are -300; explicit historical targets from 0 to 1000 remain accepted.
+No existing journal payload or snapshot is rewritten. An optional shot field
+`overexcitation_penalty_bps` (0..10000) is omitted when zero. Missing means zero,
+including for old shots; it is never recomputed during replay. Old byte payloads
+and hash chains retain their canonical form. Once negative fatigue or the new
+shot field is written, keep this reader or a newer compatible reader.
+
+## Calculated scopes without rewriting history
+
+Shot attempts may contain `scope_bonus_points` (integer 0..33). Missing means
+legacy stored effect magnitude; explicit zero means no bonus. Null is rejected.
+Old payloads omit the field and retain their canonical bytes and journal hashes.
+New live shots record the formula result, including for previously equipped
+scopes. Existing snapshots/effect magnitudes and remaining uses stay unchanged.
+Keep the new reader once an event containing this field has been written.
+
+## Hourly bread rule (schema 22)
+
+`enable_hourly_bread` activates the new rule at the current durable clock. It
+changes no player, flight, effect, action or existing schedule. The optional
+`bread_plan_effect_ids` state array is absent on historical states and present
+on modern ones; an empty array means the rule is active with no bread in the
+last plan. `with_player` preserves it. `replan_bread_schedule` records the exact
+chosen day/times and derives its bread fingerprint from effects at event time.
+It validates base-plus-bread count and retention of the nearest existing time.
+
+Legacy schema-21 checkpoints need no rebuild, since the extension changes no
+historical outcome. Older migrations retain their rebuild policy. New delayed
+calls may remain overdue while blocked and are completed one by one only when
+a matching flight succeeds; ordinary advances and bread replans retain them.
+No live journal or snapshot is edited by the installer; activation is a new
+normal journaled runtime transition after service start.
+
+## Counted duck noise (schema 23)
+
+New live shot attempts record `noisy_miss_limit=3`. Flight snapshots optionally
+carry `noisy_misses`; it is omitted until a counted miss occurs. Both fields
+are absent from old encodings, preserving historical event/state payloads.
+Schemas 21 and 22 remain authoritative checkpoints. Recovery does not edit
+scores, inventory, bread, schedules or active flight deadlines. A flight already
+active at deployment starts its counter on the next eligible miss; earlier
+noise is not guessed. Restart and replay retain subsequently recorded misses.
+Old shot events still use their original `frighten_on_miss` decision.

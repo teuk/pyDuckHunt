@@ -68,6 +68,7 @@ class GameConfiguration:
     shop_url: str | None = None
     ranking_url: str | None = None
     anti_cheat: bool = False
+    statistics_excluded_nicknames: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,7 +232,12 @@ def parse_application_configuration(
             "flight_lifetime_seconds",
             "unusual_loot_chance_per_thousand",
         ),
-        ("shop_url", "ranking_url", "anti_cheat"),
+        (
+            "shop_url",
+            "ranking_url",
+            "anti_cheat",
+            "statistics_excluded_nicknames",
+        ),
     )
     partyline_raw = root.get("partyline")
     partyline = None
@@ -321,6 +327,10 @@ def parse_application_configuration(
         shop_url=normalize_shop_url(game.get("shop_url")),
         ranking_url=normalize_ranking_url(game.get("ranking_url")),
         anti_cheat=_truth(game.get("anti_cheat", False), "anti-cheat flag"),
+        statistics_excluded_nicknames=_irc_identity_array(
+            game.get("statistics_excluded_nicknames", []),
+            "statistics exclusion",
+        ),
     )
     _validate_game_boundary(game_configuration)
     partyline_configuration = PartylineConfiguration()
@@ -459,6 +469,21 @@ def _string_array(value: object, label: str) -> tuple[str, ...]:
     return tuple(value)
 
 
+def _irc_identity_array(value: object, label: str) -> tuple[str, ...]:
+    identities = _string_array(value, label)
+    if any(
+        not identity
+        or identity.strip() != identity
+        or any(character in identity for character in (" ", "\x00", "\r", "\n"))
+        for identity in identities
+    ):
+        raise ValueError(f"{label} must contain safe IRC nicknames")
+    canonical = tuple(rfc1459_casefold(identity) for identity in identities)
+    if len(set(canonical)) != len(canonical):
+        raise ValueError(f"{label} must contain unique IRC identities")
+    return canonical
+
+
 def _path(value: object, label: str) -> Path:
     text = _text(value, label)
     path = Path(text)
@@ -502,7 +527,7 @@ def _optional_channel(value: object, label: str) -> str | None:
 
 
 def _validate_game_boundary(configuration: GameConfiguration) -> None:
-    if configuration.flights_per_day != 18:
+    if configuration.flights_per_day != 24:
         raise ValueError("configured daily flight count is not calibrated")
     if configuration.golden_weight_per_eighteen != 1:
         raise ValueError("configured golden weight is not calibrated")

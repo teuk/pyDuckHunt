@@ -13,9 +13,12 @@ projected time precedes the recovered durable state.
 
 ## Daily schedule adapter
 
-`CalibratedScheduleSource` draws 24, 21 or 18 distinct hours without replacement,
-one minute for each hour, the unchanged one-in-eighteen target kind and golden
-health when required. Every draw passes through the existing bounded integer source.
+`CalibratedScheduleSource` draws 24 distinct hours without replacement for new
+days, using one minute for each hour. It can also complete historical 18- or
+21-flight current-day plans with future randomized minutes while preserving
+every durable deadline. Target selection keeps the unchanged one-in-eighteen
+golden weight and separate golden-health draw. Every draw passes through the
+existing bounded integer source.
 
 `RuntimeSchedulingAdapter` installs the current UTC-day plan through a replay
 event, preserves an already recovered plan and dispatches its next durable tick.
@@ -59,3 +62,10 @@ DH022 adds a foreground command-line launcher behind a separate side-effect-free
 preflight and exact target confirmation. It adds no daemon, service file or
 automatic invocation. Automated coverage uses injected clocks and a local
 `socketpair()` only.
+
+Hourly bread enables expiry wake-ups, immutable plan fingerprints and recorded
+redraws. The scheduler completes already-due slots/actions before drawing a new
+plan, so bread cannot erase a due flight or a paid call. Scheduling debug prints
+`SCHEDULE event=bread-replanned` with base, bread count, plan size and next time;
+`BREAD event=flight-delay` identifies the actual per-flight extension. Private
+partyline planning refreshes when effects or concrete plan deadlines change.

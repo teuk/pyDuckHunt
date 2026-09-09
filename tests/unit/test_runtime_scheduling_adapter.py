@@ -100,10 +100,10 @@ class RuntimeSchedulingAdapterTests(unittest.TestCase):
         integers = SequenceIntegerSource()
         source = CalibratedScheduleSource(integers)
         deadlines = source.daily_schedule(0)
-        self.assertEqual(len(deadlines), 18)
-        self.assertEqual(len(set(deadlines)), 18)
+        self.assertEqual(len(deadlines), 24)
+        self.assertEqual(len(set(deadlines)), 24)
         self.assertEqual(deadlines[0], 60_000_000_000)
-        self.assertEqual(len(integers.calls), 36)
+        self.assertEqual(len(integers.calls), 48)
         selection = source.flight_selection()
         self.assertEqual((selection.kind, selection.health), (FlightKind.GOLDEN, 3))
         self.assertEqual(integers.calls[-2:], [(1, 18), (3, 5)])
@@ -114,6 +114,52 @@ class RuntimeSchedulingAdapterTests(unittest.TestCase):
         )
         self.assertEqual(len(bootstrap), BOOTSTRAP_DAILY_FLIGHT_COUNT)
         self.assertEqual(len(bootstrap_integers.calls), 48)
+
+    def test_legacy_plan_is_expanded_to_twenty_four_future_deadlines(self) -> None:
+        legacy = CalibratedScheduleSource(SequenceIntegerSource()).daily_schedule(
+            0,
+            18,
+        )
+        self.runtime.dispatch(
+            ReplayEvent.install_daily_schedule(0, 0, legacy),
+            lambda transition: (),
+        )
+        adapter, integers = self.adapter()
+        now_ns = 9 * 3_600_000_000_000 + 42 * 60_000_000_000
+        result = adapter.step(now_ns)
+        schedule = self.runtime.state.daily_schedule
+        assert schedule is not None
+        self.assertTrue(result.plan_expanded)
+        self.assertEqual(len(schedule.deadlines_ns), 24)
+        self.assertTrue(set(legacy).issubset(schedule.deadlines_ns))
+        additions = set(schedule.deadlines_ns) - set(legacy)
+        self.assertEqual(len(additions), 6)
+        self.assertTrue(all(deadline > now_ns for deadline in additions))
+        self.assertEqual(len(integers.calls), 6)
+
+    def test_live_seven_of_eighteen_cursor_survives_immediate_expansion(self) -> None:
+        legacy = CalibratedScheduleSource(SequenceIntegerSource()).daily_schedule(
+            0,
+            18,
+        )
+        self.runtime.dispatch(
+            ReplayEvent.install_daily_schedule(0, 0, legacy),
+            lambda transition: (),
+        )
+        for deadline in legacy[:7]:
+            self.runtime.dispatch(
+                ReplayEvent.schedule_tick(deadline),
+                lambda transition: (),
+            )
+        now_ns = 6 * 3_600_000_000_000 + 30 * 60_000_000_000
+        adapter, _ = self.adapter()
+        result = adapter.step(now_ns)
+        schedule = self.runtime.state.daily_schedule
+        assert schedule is not None
+        self.assertTrue(result.plan_expanded)
+        self.assertEqual(schedule.next_index, 7)
+        self.assertEqual(schedule.deadlines_ns[:7], legacy[:7])
+        self.assertEqual(len(schedule.deadlines_ns), 24)
         with self.assertRaises(ValueError):
             CalibratedScheduleSource(SequenceIntegerSource()).daily_schedule(0, 20)
 
@@ -134,6 +180,57 @@ class RuntimeSchedulingAdapterTests(unittest.TestCase):
         self.assertEqual(self.runtime.state.last_flight.ended_at_ns, flight.expires_at_ns)
         self.assertTrue(any(b"s'\xc3\xa9chappe" in wire for wire in self.output[-1]))
         self.assertTrue(any(dispatch.transition is not None for dispatch in expired.dispatches))
+
+    def test_duck_call_wakes_at_its_deadline_and_preserves_hourly_bread(self) -> None:
+        deadlines = tuple(3_600_000_000_000 + index * 60_000_000_000 for index in range(24))
+        self.runtime.dispatch(
+            ReplayEvent.install_daily_schedule(0, 0, deadlines),
+            lambda transition: (),
+        )
+        self.runtime.dispatch(
+            ReplayEvent.admin_channel_item(1, "Owner", 21),
+            lambda transition: (),
+        )
+        self.runtime.dispatch(
+            ReplayEvent.admin_channel_item(2, "Owner", 20, scheduled_for_ns=200),
+            lambda transition: (),
+        )
+        adapter, _ = self.adapter()
+
+        self.assertEqual(adapter.step(199).next_deadline_ns, 200)
+        launched = adapter.step(200)
+
+        self.assertEqual(len(launched.dispatches), 1)
+        self.assertEqual(self.runtime.state.scheduled_actions, ())
+        self.assertEqual(len(self.runtime.state.effects), 1)
+        assert self.runtime.state.flight is not None
+        self.assertEqual(self.runtime.state.flight.spawned_at_ns, 200)
+        self.assertEqual(self.runtime.state.flight.kind, FlightKind.STANDARD)
+        self.assertTrue(any(b"PRIVMSG #pond :" in wire for wire in self.output[-1]))
+
+    def test_due_duck_call_waits_for_an_active_flight_then_launches(self) -> None:
+        deadlines = tuple(3_600_000_000_000 + index * 60_000_000_000 for index in range(24))
+        self.runtime.dispatch(
+            ReplayEvent.install_daily_schedule(0, 0, deadlines),
+            lambda transition: (),
+        )
+        self.runtime.dispatch(
+            ReplayEvent.start_flight(100, 200),
+            lambda transition: (),
+        )
+        self.runtime.dispatch(
+            ReplayEvent.admin_channel_item(101, "Owner", 20, scheduled_for_ns=200),
+            lambda transition: (),
+        )
+        adapter, _ = self.adapter()
+
+        self.assertEqual(adapter.step(200).next_deadline_ns, 300)
+        adapter.step(300)
+
+        self.assertEqual(self.runtime.state.scheduled_actions, ())
+        assert self.runtime.state.flight is not None
+        self.assertEqual(self.runtime.state.flight.spawned_at_ns, 300)
+        self.assertEqual(self.runtime.state.flight.kind, FlightKind.STANDARD)
 
     def test_anti_cheat_draws_only_for_an_accepted_started_flight(self) -> None:
         appearances = CountingAppearanceSource()
@@ -199,7 +296,8 @@ class RuntimeSchedulingAdapterTests(unittest.TestCase):
     def test_install_then_bounded_late_poll_uses_exact_deadline(self) -> None:
         adapter, _ = self.adapter()
         installed = adapter.step(0)
-        self.assertEqual(len(installed.dispatches), 1)
+        self.assertEqual(len(installed.dispatches), 2)
+
         schedule = self.runtime.state.daily_schedule
         assert schedule is not None
         first = schedule.deadlines_ns[0]

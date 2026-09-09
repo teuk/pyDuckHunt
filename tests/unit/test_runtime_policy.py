@@ -38,18 +38,15 @@ class RuntimePolicyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_daily_schedule(0, (*schedule[:-1], DAY_NS))
 
-    def test_community_progress_selects_bootstrap_growth_and_mature_counts(self) -> None:
-        for hits, expected in (
-            (0, BOOTSTRAP_DAILY_FLIGHT_COUNT),
-            (24, BOOTSTRAP_DAILY_FLIGHT_COUNT),
-            (25, GROWTH_DAILY_FLIGHT_COUNT),
-            (99, GROWTH_DAILY_FLIGHT_COUNT),
-            (100, DAILY_FLIGHT_COUNT),
-        ):
+    def test_community_progress_never_reduces_the_fixed_daily_count(self) -> None:
+        for hits in (0, 24, 25, 99, 100, 10_000):
             with self.subTest(hits=hits):
                 state = GameState(players=(PlayerState("hunter", "Hunter", hits=hits),))
                 self.assertEqual(community_hunt_progress(state), hits)
-                self.assertEqual(adaptive_daily_flight_count(state), expected)
+                self.assertEqual(
+                    adaptive_daily_flight_count(state),
+                    BOOTSTRAP_DAILY_FLIGHT_COUNT,
+                )
         combined = GameState(
             players=(
                 PlayerState("alice", "Alice", hits=12),
@@ -57,7 +54,10 @@ class RuntimePolicyTests(unittest.TestCase):
             )
         )
         self.assertEqual(community_hunt_progress(combined), 25)
-        self.assertEqual(adaptive_daily_flight_count(combined), GROWTH_DAILY_FLIGHT_COUNT)
+        self.assertEqual(
+            adaptive_daily_flight_count(combined),
+            BOOTSTRAP_DAILY_FLIGHT_COUNT,
+        )
 
     def test_one_in_eighteen_kind_weight_and_golden_health_are_explicit(self) -> None:
         golden = select_scheduled_flight(1, golden_health_roll=5)

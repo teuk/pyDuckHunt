@@ -37,7 +37,7 @@ def configuration(root: Path):
             },
             "game": {
                 "enabled": True,
-                "flights_per_day": 18,
+                "flights_per_day": 24,
                 "golden_weight_per_eighteen": 1,
                 "flight_lifetime_seconds": 300,
                 "unusual_loot_chance_per_thousand": 0,

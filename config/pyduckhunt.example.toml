@@ -19,7 +19,7 @@ log_directory = "logs"
 
 [game]
 enabled = false
-flights_per_day = 18
+flights_per_day = 24
 golden_weight_per_eighteen = 1
 flight_lifetime_seconds = 300
 # Kept at zero until an unusual-loot frequency is approved for the pilot.
@@ -30,6 +30,9 @@ anti_cheat = false
 shop_url = ""
 # Empty keeps !duckrank link-free until an operator publishes a ranking page.
 ranking_url = ""
+# Optional RFC1459 identities omitted from rankings and aggregate statistics.
+# Historical journal records remain intact.
+statistics_excluded_nicknames = []
 
 [partyline]
 # Disabled for fresh installs. The beta deployment binds this listener to loopback.

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from pyduckhunt.game.model import FlightKind, GameState, LastFlightConclusion
 from pyduckhunt.game.progression import available_experience
+from pyduckhunt.game.ranking import statistical_players
 from pyduckhunt.version import __version__
 
 
@@ -130,7 +131,12 @@ class StatePublisherFanout:
 class PrometheusMetricsPublisher:
     """Merge durable and runtime facts into one atomic text snapshot."""
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        excluded_nicknames: tuple[str, ...] = (),
+    ) -> None:
         target = Path(path)
         if (
             not target.is_absolute()
@@ -141,6 +147,7 @@ class PrometheusMetricsPublisher:
         ):
             raise ValueError("metrics target must be a safe absolute .prom path")
         self.path = target
+        self.excluded_nicknames = excluded_nicknames
         self._lock = threading.Lock()
         self._state: GameState | None = None
         self._runtime: RuntimeMetricsSnapshot | None = None
@@ -170,7 +177,11 @@ class PrometheusMetricsPublisher:
     def _write_locked(self) -> None:
         assert self._state is not None
         assert self._runtime is not None
-        encoded = render_prometheus_metrics(self._state, self._runtime)
+        encoded = render_prometheus_metrics(
+            self._state,
+            self._runtime,
+            excluded_nicknames=self.excluded_nicknames,
+        )
         if len(encoded) > MAX_METRICS_PAGE_BYTES:
             raise ValueError("metrics page exceeds the bounded size")
         parent = self.path.parent
@@ -205,6 +216,8 @@ class PrometheusMetricsPublisher:
 def render_prometheus_metrics(
     state: GameState,
     runtime: RuntimeMetricsSnapshot,
+    *,
+    excluded_nicknames: tuple[str, ...] = (),
 ) -> bytes:
     """Render aggregate metrics only; player identities never become labels."""
 
@@ -214,7 +227,10 @@ def render_prometheus_metrics(
     ):
         raise ValueError("Prometheus rendering requires state and runtime metrics")
 
-    players = state.players
+    players = statistical_players(
+        state,
+        excluded_nicknames=excluded_nicknames,
+    )
     values = {
         "players": len(players),
         "hits": sum(player.hits for player in players),

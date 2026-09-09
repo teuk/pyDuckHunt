@@ -13,6 +13,8 @@ from pyduckhunt.identity import rfc1459_casefold
 
 ITEM_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 FATIGUE_SCALE = 100
+MIN_FATIGUE_CENTI = -3 * FATIGUE_SCALE
+THERMOS_TARGET_CENTI = MIN_FATIGUE_CENTI
 MAX_FATIGUE_CENTI = 100 * FATIGUE_SCALE
 LETTER_SLOT_COUNT = 8
 
@@ -98,7 +100,7 @@ class ScheduledAction:
     action_id: int
     item_id: int
     key: str
-    source_key: str
+    source_key: str | None
     created_at_ns: int
     due_at_ns: int
 
@@ -109,8 +111,10 @@ class ScheduledAction:
             raise ValueError("action shop item identifier must be positive")
         if not ITEM_KEY_PATTERN.fullmatch(self.key):
             raise ValueError("action key must be a stable lowercase identifier")
-        if not isinstance(self.source_key, str) or not self.source_key:
-            raise ValueError("action source key must not be empty")
+        if self.source_key is not None and (
+            not isinstance(self.source_key, str) or not self.source_key
+        ):
+            raise ValueError("action source key must be a string or null")
         if type(self.created_at_ns) is not int or self.created_at_ns < 0:
             raise ValueError("action creation time is invalid")
         if type(self.due_at_ns) is not int or self.due_at_ns <= self.created_at_ns:
@@ -276,11 +280,15 @@ class ShotAttempt:
     miss_penalty: int = 0
     wild_penalty: int = 0
     fatigue_gain_centi: int = FATIGUE_SCALE
+    fatigue_penalty_bps: int = 0
+    overexcitation_penalty_bps: int = 0
+    scope_bonus_points: int | None = None
     incident: IncidentAttempt | None = None
     loot: LootAward | None = None
+    noisy_miss_limit: int | None = None
 
     def __post_init__(self) -> None:
-        for field_name in ("base_accuracy_bps", "base_jam_bps"):
+        for field_name in ("base_accuracy_bps", "base_jam_bps", "fatigue_penalty_bps", "overexcitation_penalty_bps"):
             value = getattr(self, field_name)
             if type(value) is not int or not 0 <= value <= 10_000:
                 raise ValueError(f"{field_name} must be between zero and 10000")
@@ -288,11 +296,20 @@ class ShotAttempt:
             value = getattr(self, field_name)
             if type(value) is not int or not 1 <= value <= 10_000:
                 raise ValueError(f"{field_name} must be between one and 10000")
+        if self.scope_bonus_points is not None and (
+            type(self.scope_bonus_points) is not int or not 0 <= self.scope_bonus_points <= 33
+        ):
+            raise ValueError("scope bonus must be an integer from zero to 33")
         if self.recycler_roll is not None and (
             type(self.recycler_roll) is not int
             or not 1 <= self.recycler_roll <= 30
         ):
             raise ValueError("recycler_roll must be between one and 30 or null")
+        if self.noisy_miss_limit is not None:
+            if type(self.noisy_miss_limit) is not int or not 1 <= self.noisy_miss_limit <= 100:
+                raise ValueError("noisy miss limit must be an integer from one to 100")
+            if self.frighten_on_miss:
+                raise ValueError("counted noise and legacy escape decision cannot coexist")
         if type(self.frighten_on_miss) is not bool:
             raise ValueError("frighten_on_miss must be a truth value")
         for field_name in ("miss_penalty", "wild_penalty", "fatigue_gain_centi"):
@@ -403,7 +420,7 @@ class PlayerState:
                 raise ValueError(f"player {field_name} must be a non-negative integer")
         if (
             type(self.fatigue_centi) is not int
-            or not 0 <= self.fatigue_centi <= MAX_FATIGUE_CENTI
+            or not MIN_FATIGUE_CENTI <= self.fatigue_centi <= MAX_FATIGUE_CENTI
         ):
             raise ValueError("player fatigue is outside the calibrated range")
         if type(self.shop_credit) is not int or self.shop_credit < 0:
@@ -455,6 +472,7 @@ class FlightState:
     max_health: int = 1
     kind: FlightKind = FlightKind.STANDARD
     reward_experience: int = 10
+    noisy_misses: int | None = None
 
     def __post_init__(self) -> None:
         if self.flight_id < 1:
@@ -469,6 +487,10 @@ class FlightState:
             raise ValueError("flight kind is invalid")
         if type(self.reward_experience) is not int or self.reward_experience < 0:
             raise ValueError("flight reward must be a non-negative integer")
+        if self.noisy_misses is not None and (
+            type(self.noisy_misses) is not int or self.noisy_misses < 0
+        ):
+            raise ValueError("flight noisy misses must be a non-negative integer")
 
 
 @dataclass(frozen=True, slots=True)
@@ -520,8 +542,16 @@ class GameState:
     curses: tuple[ActiveCurse, ...] = ()
     daily_schedule: DailySchedule | None = None
     throttle_windows: tuple[ThrottleWindow, ...] = ()
+    # None: historical consumption rule. Tuple: hourly bread rule enabled;
+    # identifiers describe the bread used to draw the current plan.
+    bread_plan_effect_ids: tuple[int, ...] | None = None
 
     def __post_init__(self) -> None:
+        if self.bread_plan_effect_ids is not None:
+            ids = self.bread_plan_effect_ids
+            if (type(ids) is not tuple or any(type(i) is not int or i < 1 for i in ids)
+                    or ids != tuple(sorted(set(ids)))):
+                raise ValueError("bread planning identifiers must be unique sorted integers")
         if (
             self.now_ns < 0
             or self.next_flight_id < 1
@@ -577,9 +607,13 @@ class GameState:
             raise ValueError("scheduled actions must be unique and sorted by identifier")
         if self.scheduled_actions and self.next_action_id <= self.scheduled_actions[-1].action_id:
             raise ValueError("action sequence does not advance beyond scheduled actions")
-        if any(action.due_at_ns <= self.now_ns for action in self.scheduled_actions):
+        if any(action.due_at_ns <= self.now_ns for action in self.scheduled_actions
+               if self.bread_plan_effect_ids is None or action.item_id not in (20, 23)):
             raise ValueError("scheduled action has already reached its deadline")
-        if any(action.source_key not in set(keys) for action in self.scheduled_actions):
+        if any(
+            action.source_key is not None and action.source_key not in set(keys)
+            for action in self.scheduled_actions
+        ):
             raise ValueError("scheduled action source is absent from game state")
         curse_ids = tuple(curse.curse_id for curse in self.curses)
         if curse_ids != tuple(sorted(curse_ids)) or len(curse_ids) != len(set(curse_ids)):
@@ -632,6 +666,7 @@ class GameState:
             curses=self.curses,
             daily_schedule=self.daily_schedule,
             throttle_windows=self.throttle_windows,
+            bread_plan_effect_ids=self.bread_plan_effect_ids,
         )
 
 
@@ -703,8 +738,11 @@ class Outcome:
     damage_dealt: int = 0
     rounds_consumed: int = 0
     ammunition_recycled: bool = False
+    ammunition_item_id: int | None = None
     remaining_health: int | None = None
     accuracy_bonus_percent: int = 0
+    fatigue_penalty_bps: int = 0
+    overexcitation_penalty_bps: int = 0
     effective_accuracy_bps: int | None = None
     effective_jam_bps: int | None = None
     noise_suppressed: bool = False
@@ -745,6 +783,8 @@ class Outcome:
     carry_fatigue_multiplier: int = 1
 
     def __post_init__(self) -> None:
+        if self.ammunition_item_id not in (None, 3, 4):
+            raise ValueError("ammunition item identifier must be 3, 4 or absent")
         if self.late_by_ms is not None and (
             type(self.late_by_ms) is not int or self.late_by_ms < 0
         ):

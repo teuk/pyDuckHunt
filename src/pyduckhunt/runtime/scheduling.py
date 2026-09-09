@@ -7,15 +7,25 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from pyduckhunt.game.model import GameState, OutcomeKind, Transition
+from pyduckhunt.game.bread import (active_channel_breads, bread_identifiers,
+    preserved_bread_deadline, MAX_CHANNEL_BREAD)
+from pyduckhunt.game.model import (
+    DailySchedule,
+    FlightKind,
+    GameState,
+    OutcomeKind,
+    ScheduledAction,
+    Transition,
+)
 from pyduckhunt.game.runtime import (
     BOOTSTRAP_DAILY_FLIGHT_COUNT,
     DAILY_FLIGHT_COUNT,
     DAY_NS,
+    FIXED_DAILY_FLIGHT_COUNT,
+    FLIGHT_LIFETIME_NS,
     GROWTH_DAILY_FLIGHT_COUNT,
     SUPPORTED_DAILY_FLIGHT_COUNTS,
     FlightSelection,
-    adaptive_daily_flight_count,
     build_daily_schedule,
     community_hunt_progress,
     select_scheduled_flight,
@@ -95,13 +105,13 @@ class CalibratedScheduleSource:
     def daily_schedule(
         self,
         day_start_ns: int,
-        flight_count: int = DAILY_FLIGHT_COUNT,
+        flight_count: int = FIXED_DAILY_FLIGHT_COUNT,
     ) -> tuple[int, ...]:
         self._ensure_owner()
         if type(day_start_ns) is not int or day_start_ns < 0 or day_start_ns % DAY_NS:
             raise ValueError("schedule day start must align with UTC")
         if type(flight_count) is not int or flight_count not in SUPPORTED_DAILY_FLIGHT_COUNTS:
-            raise ValueError("schedule flight count is outside the adaptive policy")
+            raise ValueError("schedule flight count is outside the supported policy")
         available_hours = list(range(24))
         selected_hours: list[int] = []
         for _ in range(flight_count):
@@ -114,6 +124,31 @@ class CalibratedScheduleSource:
             minutes,
         )
 
+    def bread_schedule(self, state: GameState, now_ns: int) -> tuple[int, ...]:
+        """Draw the reference method-2 plan: base + bread, hourly rounds."""
+        self._ensure_owner()
+        day = now_ns - now_ns % DAY_NS
+        count = FIXED_DAILY_FLIGHT_COUNT + min(MAX_CHANNEL_BREAD,
+                                              len(active_channel_breads(state, now_ns)))
+        keep = preserved_bread_deadline(state, now_ns)
+        chosen = set(() if keep is None else (keep,))
+        hours = list(range(24))
+        while len(chosen) < count:
+            hour = hours.pop(self._draw(0, len(hours) - 1))
+            if not hours:
+                hours = list(range(24))
+            # Equivalent to retrying duplicate minute draws, with bounded work.
+            # Midnight itself is not a valid time bind in the reference.
+            candidates = [day + (hour * 60 + minute) * 60_000_000_000
+                          for minute in range(60) if hour != 0 or minute != 0]
+            minute = self._draw(0, 59)
+            initial = day + (hour * 60 + (1 if hour == 0 and minute == 0 else minute)) * 60_000_000_000
+            if initial in chosen:
+                candidates = [d for d in candidates if d not in chosen]
+                initial = candidates[self._draw(0, len(candidates) - 1)]
+            chosen.add(initial)
+        return tuple(sorted(chosen))
+
     def flight_selection(self) -> FlightSelection:
         self._ensure_owner()
         kind_roll = self._draw(1, DAILY_FLIGHT_COUNT)
@@ -122,6 +157,40 @@ class CalibratedScheduleSource:
             kind_roll,
             golden_health_roll=golden_health,
         )
+
+    def expanded_daily_schedule(
+        self,
+        schedule: DailySchedule,
+        now_ns: int,
+        flight_count: int = FIXED_DAILY_FLIGHT_COUNT,
+    ) -> tuple[int, ...]:
+        """Add randomized future minutes while preserving today's durable plan."""
+
+        self._ensure_owner()
+        if not isinstance(schedule, DailySchedule):
+            raise ValueError("schedule expansion requires one daily schedule")
+        if type(now_ns) is not int or now_ns < 0:
+            raise ValueError("schedule expansion time must be non-negative")
+        if type(flight_count) is not int or flight_count not in SUPPORTED_DAILY_FLIGHT_COUNTS:
+            raise ValueError("schedule expansion count is outside the fixed policy")
+        missing = flight_count - len(schedule.deadlines_ns)
+        if missing <= 0:
+            return schedule.deadlines_ns
+        minute_ns = 60 * 1_000_000_000
+        first = ((now_ns // minute_ns) + 1) * minute_ns
+        end = schedule.day_start_ns + DAY_NS
+        existing = set(schedule.deadlines_ns)
+        available = [
+            deadline
+            for deadline in range(first, end, minute_ns)
+            if deadline not in existing
+        ]
+        if len(available) < missing:
+            return schedule.deadlines_ns
+        additions: list[int] = []
+        for _ in range(missing):
+            additions.append(available.pop(self._draw(0, len(available) - 1)))
+        return tuple(sorted((*schedule.deadlines_ns, *additions)))
 
     def _draw(self, minimum: int, maximum: int) -> int:
         value = self._integer_source(minimum, maximum)
@@ -156,7 +225,9 @@ class ScheduleStatus:
     def __post_init__(self) -> None:
         if type(self.day_start_ns) is not int or self.day_start_ns < 0 or self.day_start_ns % DAY_NS:
             raise ValueError("schedule status day is invalid")
-        if self.flight_count not in SUPPORTED_DAILY_FLIGHT_COUNTS:
+        if (type(self.flight_count) is not int or
+                (self.flight_count not in SUPPORTED_DAILY_FLIGHT_COUNTS
+                 and not 24 <= self.flight_count <= 24 + MAX_CHANNEL_BREAD)):
             raise ValueError("schedule status flight count is invalid")
         if type(self.next_index) is not int or not 0 <= self.next_index <= self.flight_count:
             raise ValueError("schedule status cursor is invalid")
@@ -171,11 +242,11 @@ class ScheduleStatus:
 
     @property
     def band(self) -> str:
-        if self.flight_count == BOOTSTRAP_DAILY_FLIGHT_COUNT:
-            return "bootstrap"
+        if self.flight_count >= BOOTSTRAP_DAILY_FLIGHT_COUNT:
+            return "fixed" if self.flight_count == 24 else "bread"
         if self.flight_count == GROWTH_DAILY_FLIGHT_COUNT:
-            return "growth"
-        return "mature"
+            return "legacy-21"
+        return "legacy-18"
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,9 +255,12 @@ class ScheduleStepResult:
     next_deadline_ns: int | None
     status: ScheduleStatus | None = None
     plan_installed: bool = False
+    plan_expanded: bool = False
     attempted_deadline_ns: int | None = None
     lateness_ns: int | None = None
     skip_reason: str | None = None
+
+    plan_replanned: bool = False
 
     def __post_init__(self) -> None:
         if type(self.dispatches) is not tuple or any(
@@ -199,8 +273,12 @@ class ScheduleStepResult:
             raise ValueError("next schedule deadline is invalid")
         if self.status is not None and not isinstance(self.status, ScheduleStatus):
             raise ValueError("schedule result status is invalid")
+        if type(self.plan_replanned) is not bool:
+            raise ValueError("bread replan flag is invalid")
         if type(self.plan_installed) is not bool:
             raise ValueError("schedule installation observation is invalid")
+        if type(self.plan_expanded) is not bool:
+            raise ValueError("schedule expansion observation is invalid")
         if (self.attempted_deadline_ns is None) != (self.lateness_ns is None):
             raise ValueError("schedule attempt timing must be paired")
         if self.attempted_deadline_ns is not None and (
@@ -275,26 +353,51 @@ class RuntimeSchedulingAdapter:
             raise ValueError("schedule clock precedes durable game time")
         dispatches: list[DispatchResult] = []
         plan_installed = False
+        plan_expanded = False
+        if self.runtime.state.bread_plan_effect_ids is None:
+            enabled = self.runtime.dispatch(
+                ReplayEvent.enable_hourly_bread(self.runtime.state.now_ns), self._render)
+            dispatches.append(enabled)
+            if enabled.status is DispatchStatus.BACKPRESSURED:
+                return self._result(tuple(dispatches), None, now_ns)
         active_flight = self.runtime.state.flight
         if active_flight is not None and now_ns >= active_flight.expires_at_ns:
+            action = _next_due_channel_action(
+                self.runtime.state,
+                active_flight.expires_at_ns,
+            )
             expired = self.runtime.dispatch(
-                ReplayEvent.advance_time(active_flight.expires_at_ns),
+                _channel_action_event(action, active_flight.expires_at_ns)
+                if action is not None
+                else ReplayEvent.advance_time(active_flight.expires_at_ns),
                 self._render,
             )
             dispatches.append(expired)
             if expired.status is DispatchStatus.BACKPRESSURED:
                 return self._result(tuple(dispatches), active_flight.expires_at_ns, now_ns)
+        if self.runtime.state.flight is None:
+            action = _next_due_channel_action(self.runtime.state, now_ns)
+            if action is not None:
+                action_now_ns = max(action.due_at_ns, self.runtime.state.now_ns)
+                launched = self.runtime.dispatch(
+                    _channel_action_event(action, action_now_ns),
+                    self._render,
+                )
+                dispatches.append(launched)
+                if launched.status is DispatchStatus.BACKPRESSURED:
+                    return self._result(tuple(dispatches), action_now_ns, now_ns)
         day_start_ns = now_ns - now_ns % DAY_NS
         schedule = self.runtime.state.daily_schedule
         if schedule is not None and schedule.day_start_ns > day_start_ns:
             raise RuntimeError("durable schedule is ahead of the runtime clock")
         if schedule is None or schedule.day_start_ns < day_start_ns:
-            flight_count = adaptive_daily_flight_count(self.runtime.state)
-            deadlines = self.source.daily_schedule(day_start_ns, flight_count)
-            installed = self.runtime.dispatch(
-                ReplayEvent.install_daily_schedule(now_ns, day_start_ns, deadlines),
-                self._render,
-            )
+            if active_channel_breads(self.runtime.state, now_ns):
+                deadlines = self.source.bread_schedule(self.runtime.state, now_ns)
+                event = ReplayEvent.replan_bread_schedule(now_ns, day_start_ns, deadlines)
+            else:
+                deadlines = self.source.daily_schedule(day_start_ns, FIXED_DAILY_FLIGHT_COUNT)
+                event = ReplayEvent.install_daily_schedule(now_ns, day_start_ns, deadlines)
+            installed = self.runtime.dispatch(event, self._render)
             dispatches.append(installed)
             if installed.status is DispatchStatus.BACKPRESSURED:
                 return self._result(tuple(dispatches), None, now_ns)
@@ -302,12 +405,44 @@ class RuntimeSchedulingAdapter:
             schedule = self.runtime.state.daily_schedule
 
         assert schedule is not None
+        if len(schedule.deadlines_ns) < FIXED_DAILY_FLIGHT_COUNT:
+            expanded_deadlines = self.source.expanded_daily_schedule(schedule, now_ns)
+            if expanded_deadlines != schedule.deadlines_ns:
+                expanded = self.runtime.dispatch(
+                    ReplayEvent.expand_daily_schedule(
+                        now_ns,
+                        schedule.day_start_ns,
+                        expanded_deadlines,
+                    ),
+                    self._render,
+                )
+                dispatches.append(expanded)
+                if expanded.status is DispatchStatus.BACKPRESSURED:
+                    return self._result(tuple(dispatches), None, now_ns)
+                plan_expanded = True
+                schedule = self.runtime.state.daily_schedule
+                assert schedule is not None
+        identifiers = bread_identifiers(self.runtime.state, now_ns)
+        due_daily = (schedule.next_index < len(schedule.deadlines_ns)
+                     and schedule.deadlines_ns[schedule.next_index] <= now_ns)
+        if self.runtime.state.bread_plan_effect_ids != identifiers and not due_daily:
+            deadlines = self.source.bread_schedule(self.runtime.state, now_ns)
+            replanned = self.runtime.dispatch(
+                ReplayEvent.replan_bread_schedule(now_ns, day_start_ns, deadlines), self._render)
+            dispatches.append(replanned)
+            next_deadline = min((d for d in deadlines if d > now_ns), default=day_start_ns + DAY_NS)
+            return self._result(tuple(dispatches),
+                None if replanned.status is DispatchStatus.BACKPRESSURED else
+                _next_runtime_deadline(self.runtime.state, next_deadline), now_ns,
+                plan_installed=plan_installed, plan_expanded=plan_expanded,
+                plan_replanned=replanned.status is DispatchStatus.ACCEPTED)
         if schedule.next_index >= len(schedule.deadlines_ns):
             return self._result(
                 tuple(dispatches),
                 _next_runtime_deadline(self.runtime.state, day_start_ns + DAY_NS),
                 now_ns,
                 plan_installed=plan_installed,
+                plan_expanded=plan_expanded,
             )
         deadline_ns = schedule.deadlines_ns[schedule.next_index]
         if deadline_ns > now_ns:
@@ -316,6 +451,7 @@ class RuntimeSchedulingAdapter:
                 _next_runtime_deadline(self.runtime.state, deadline_ns),
                 now_ns,
                 plan_installed=plan_installed,
+                plan_expanded=plan_expanded,
             )
 
         lateness_ns = now_ns - deadline_ns
@@ -351,6 +487,7 @@ class RuntimeSchedulingAdapter:
                 deadline_ns,
                 now_ns,
                 plan_installed=plan_installed,
+                plan_expanded=plan_expanded,
                 attempted_deadline_ns=deadline_ns,
                 lateness_ns=lateness_ns,
                 skip_reason=skip_reason,
@@ -367,6 +504,7 @@ class RuntimeSchedulingAdapter:
             _next_runtime_deadline(self.runtime.state, next_deadline),
             now_ns,
             plan_installed=plan_installed,
+            plan_expanded=plan_expanded,
             attempted_deadline_ns=deadline_ns,
             lateness_ns=lateness_ns,
             skip_reason=skip_reason,
@@ -379,6 +517,8 @@ class RuntimeSchedulingAdapter:
         now_ns: int,
         *,
         plan_installed: bool = False,
+        plan_expanded: bool = False,
+        plan_replanned: bool = False,
         attempted_deadline_ns: int | None = None,
         lateness_ns: int | None = None,
         skip_reason: str | None = None,
@@ -396,7 +536,7 @@ class RuntimeSchedulingAdapter:
                     else schedule.deadlines_ns[schedule.next_index]
                 ),
                 community_progress=community_hunt_progress(self.runtime.state),
-                recommended_flight_count=adaptive_daily_flight_count(self.runtime.state),
+                recommended_flight_count=FIXED_DAILY_FLIGHT_COUNT,
                 flight_active=_flight_active_at(self.runtime.state, now_ns),
             )
         return ScheduleStepResult(
@@ -404,6 +544,8 @@ class RuntimeSchedulingAdapter:
             next_deadline_ns=next_deadline_ns,
             status=status,
             plan_installed=plan_installed,
+            plan_expanded=plan_expanded,
+            plan_replanned=plan_replanned,
             attempted_deadline_ns=attempted_deadline_ns,
             lateness_ns=lateness_ns,
             skip_reason=skip_reason,
@@ -466,6 +608,36 @@ def _flight_active_at(state: GameState, now_ns: int) -> bool:
 
 
 def _next_runtime_deadline(state: GameState, schedule_deadline_ns: int) -> int:
-    if state.flight is None:
-        return schedule_deadline_ns
-    return min(schedule_deadline_ns, state.flight.expires_at_ns)
+    deadlines = [schedule_deadline_ns]
+    if state.bread_plan_effect_ids is not None:
+        deadlines.extend(effect.expires_at_ns for effect in active_channel_breads(state, state.now_ns)
+                         if effect.expires_at_ns is not None)
+    if state.flight is not None:
+        deadlines.append(state.flight.expires_at_ns)
+    else:
+        deadlines.extend(action.due_at_ns for action in state.scheduled_actions)
+    return min(deadlines)
+
+
+def _next_due_channel_action(
+    state: GameState,
+    now_ns: int,
+) -> ScheduledAction | None:
+    return min(
+        (
+            action
+            for action in state.scheduled_actions
+            if action.due_at_ns <= now_ns and action.item_id in (20, 23)
+        ),
+        key=lambda action: (action.due_at_ns, action.action_id),
+        default=None,
+    )
+
+
+def _channel_action_event(action: ScheduledAction, now_ns: int) -> ReplayEvent:
+    kind = FlightKind.STANDARD if action.item_id == 20 else FlightKind.MECHANICAL
+    return ReplayEvent.start_flight(
+        now_ns,
+        FLIGHT_LIFETIME_NS,
+        kind=kind,
+    )

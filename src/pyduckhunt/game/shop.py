@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from pyduckhunt.game.bread import active_channel_breads, MAX_CHANNEL_BREAD
 from pyduckhunt.game.catalog import (
     DuplicatePolicy,
     GrantKind,
@@ -24,6 +25,7 @@ from pyduckhunt.game.model import (
     FATIGUE_SCALE,
     GameState,
     MAX_FATIGUE_CENTI,
+    MIN_FATIGUE_CENTI,
     Outcome,
     OutcomeKind,
     PlayerState,
@@ -265,7 +267,7 @@ def purchase(
         assert item.fatigue_relief_max is not None
         if (
             type(fatigue_target_centi) is not int
-            or not 0 <= fatigue_target_centi <= item.fatigue_relief_max * FATIGUE_SCALE
+            or not MIN_FATIGUE_CENTI <= fatigue_target_centi <= item.fatigue_relief_max * FATIGUE_SCALE
         ):
             raise ValueError("thermos fatigue target is outside its calibrated range")
     elif item.fatigue_relief_max is None:
@@ -277,7 +279,7 @@ def purchase(
         assert fatigue_player is not None
         maximum_relief_centi = min(
             item.fatigue_relief_max * FATIGUE_SCALE,
-            fatigue_player.fatigue_centi,
+            max(0, fatigue_player.fatigue_centi),
         )
         if fatigue_relief_centi is None:
             fatigue_relief_centi = maximum_relief_centi
@@ -359,6 +361,10 @@ def purchase(
             )
         )
         return Transition(current, tuple(outcomes))
+    if (item_id == 21 and current.bread_plan_effect_ids is not None
+            and len(active_channel_breads(current, now_ns)) >= MAX_CHANNEL_BREAD):
+        return Transition(current, tuple(outcomes) + (Outcome(
+            OutcomeKind.SHOP_NOT_APPLICABLE, actor=nickname, item_id=21, player=player),))
     shop_credit_spent = min(player.shop_credit, cost)
     experience_spent = cost - shop_credit_spent
     if available_experience(player) < experience_spent:
@@ -596,7 +602,8 @@ def purchase(
             discount_percent=discount_percent,
             levels_lost=debit.levels_lost,
             effect_id=effect_id,
-            effect_magnitude=settled_effect_magnitude,
+            effect_magnitude=(20 if item_id == 21 and current.bread_plan_effect_ids is not None
+                              else settled_effect_magnitude),
             player=player,
             target=target_nickname,
             effect_blocked=effect_blocked,

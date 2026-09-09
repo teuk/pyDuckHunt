@@ -6,6 +6,7 @@ from pathlib import Path
 
 from pyduckhunt.game.admin import (
     PlayerAdministrationError,
+    apply_admin_channel_item,
     apply_player_update,
     apply_weapon_control,
 )
@@ -141,17 +142,55 @@ class PartylineAdminTests(unittest.TestCase):
         )
         self.assertFalse(rearmed.state.players[0].confiscated)
         self.assertFalse(rearmed.state.players[0].permanently_confiscated)
-        self.assertEqual(SCHEMA_VERSION, 20)
+        self.assertEqual(SCHEMA_VERSION, 23)
 
         with tempfile.TemporaryDirectory() as directory:
             journal = JournalFile(Path(directory) / "events.jsonl")
             record = journal.append(event)
-            self.assertEqual(record.source_schema, 20)
+            self.assertEqual(record.source_schema, 23)
             replayed = replay_records(
                 journal.read_records(),
                 initial_state=GameState(players=(player(),)),
             )
             self.assertEqual(replayed.state.players[0].ammo, 3)
+
+    def test_admin_channel_items_replay_without_creating_or_charging_a_player(self) -> None:
+        bread_event = ReplayEvent.admin_channel_item(100, "Te[u]K", 21)
+        bread = apply_replay_event(GameState(), bread_event)
+        self.assertEqual(bread.state.players, ())
+        self.assertEqual(len(bread.state.effects), 1)
+        self.assertEqual(bread.state.effects[0].key, "channel_bread")
+        self.assertEqual(ReplayEvent.from_payload(bread_event.to_payload()), bread_event)
+
+        call_event = ReplayEvent.admin_channel_item(
+            200,
+            "Te[u]K",
+            20,
+            scheduled_for_ns=300,
+        )
+        call = apply_admin_channel_item(
+            bread.state,
+            "Te[u]K",
+            20,
+            200,
+            scheduled_for_ns=300,
+        )
+        replayed = apply_replay_event(bread.state, call_event)
+        self.assertEqual(replayed, call)
+        self.assertEqual(replayed.state.players, ())
+        self.assertEqual(replayed.state.scheduled_actions[0].key, "duck_call")
+        self.assertEqual(replayed.state.scheduled_actions[0].due_at_ns, 300)
+
+        for item_id, deadline in ((19, None), (20, None), (21, 300)):
+            with self.subTest(item_id=item_id, deadline=deadline), self.assertRaises(
+                (PlayerAdministrationError, ValueError)
+            ):
+                ReplayEvent.admin_channel_item(
+                    200,
+                    "Te[u]K",
+                    item_id,
+                    scheduled_for_ns=deadline,
+                )
 
 
 if __name__ == "__main__":

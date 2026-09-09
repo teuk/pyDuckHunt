@@ -1,8 +1,68 @@
 # Changelog
 
-All notable changes to pyDuckHunt will be documented in this file.
+All notable changes to pyDuckHunt are documented here. The project remains beta;
+these changes do not create a stable release or a tag.
 
 ## Unreleased
+
+### Scheduling and channel items
+
+- Fix the daily base at 24 flights regardless of activity, retaining replay of
+  historical 18- and 21-flight plans. Upgrade those plans with future slots.
+- Restore Tcl 2.11 method-2 bread: each piece lasts one hour across flights
+  and adds 20 seconds to every new duck's lifetime. Adding or expiring bread
+  redraws 24 + active-piece slots (up to 20 pieces); preserve the next deadline
+  on addition and partial expiry. An existing duck's deadline stays unchanged.
+  Attraction does not guarantee an extra flight during the bread's hour.
+- Apply the same item effects to player purchases and Owner commands. Bread
+  retains its 4 XP price and +2 temporary karma; no takeoff consumes a piece.
+- Wake paid duck calls and mechanical actions at their recorded deadlines,
+  keep them while another flight is active, and consume one only when its
+  matching flight starts. Bread expiry and replanning cannot discard a call.
+- Bind Owner permissions to the IRC account or registered ident@host rather
+  than the current nickname. Owner bread and call replies, including refusals,
+  stay private. Player replies expose no exact future flight time.
+- Add Owner-only channel/PM duckplanning NOTICE views and partyline
+  `.duckplanning`, listing every slot in Europe/Paris, actual wake-up, pending
+  actions and bread expiry. Refresh partyline/debug facts when those change;
+  elapsed slots in a redrawn plan are not presented as real hunting history.
+
+### Accuracy, fatigue and shot feedback
+
+- Share one accuracy calculation between live shots and player profiles.
+  Fatigue above 12 costs three accuracy points per extra fatigue point;
+  endurance suppresses the penalty. Show the final probability and relevant
+  fatigued marker without claiming fatigue caused any particular miss.
+- Make new 10 XP thermos purchases set fatigue to -3.00 and show before/after
+  values. Each negative point costs three accuracy points; show overexcitation
+  in profiles, inventory and affected shots. Keep fixed-point arithmetic.
+- Compute scope bonuses as floor((100 - base accuracy percent) / 3), including
+  equipped scopes and loot. Level 9 receives +11 points. Preserve the 5 XP
+  price and six uses; keep purchase/loot messages concise and document the formula.
+- Count three unsuppressed misses per ordinary duck, shared across hunters,
+  as configured in the supplied Tcl 2.11. Silencers and silent weapons do not
+  add noise; golden and mechanical ducks are immune to noise escape.
+- Use plain missed-shot feedback. Explosive impacts use BOUM and triple damage;
+  golden impacts retain ammunition markers. Verify the lucky charm adds its
+  actual bonus: a standard 10 XP duck with a +6 charm awards 16 XP.
+
+### Ranking, statistics and durability
+
+- Add an RFC1459-aware exclusion list for non-playing operators across IRC,
+  partyline, generated ranking and aggregate metrics, without deleting history.
+- Give the generated ranking a hover/focus/touch inventory view, eleven compact
+  desktop columns and responsive player cards without hidden statistics.
+- Extend persistence through schema 23 for Owner channel items, hourly bread,
+  settled fatigue/scope rules and counted duck noise. Preserve historical
+  outcomes and authoritative schema-21/22 checkpoints; new counters survive restart.
+- Update configuration examples and game/operator documentation. The separately
+  deployed shop catalog follows the bread, scope and thermos descriptions in
+  `docs/SHOP.md`; its static deployment assets are outside this repository.
+
+## Initial public beta — 2026-09-07
+
+The following entries describe the foundation committed in `fb7bf39`. Rules
+superseded by the Unreleased section are retained here as development history.
 
 ### Fixed
 
