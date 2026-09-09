@@ -5,6 +5,19 @@ these changes do not create a stable release or a tag.
 
 ## Unreleased
 
+### Public beta onboarding and release preparation
+
+- Keep the English-first README concise and add a documentation index,
+  troubleshooting guide and evidence-based beta exit roadmap.
+- Add language and environment fields to bug reports, simplify player feature
+  requests, and document the contribution and translation workflow.
+- Exercise fresh English and French editable installs separately in CI,
+  including installed messages, disabled private configuration, reinstall
+  preservation and rejection of conflicting language choices.
+- Correct the installer's final instructions: review the target and enable
+  the game before the connection-free pilot check, then launch separately.
+- Preserve game behavior, instance state, version and the no-release boundary.
+
 ### French and English messages
 
 - Add a complete English presentation catalogue, using the supplied Tcl 2.11

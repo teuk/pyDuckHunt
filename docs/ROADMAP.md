@@ -1,5 +1,34 @@
 # Roadmap
 
+pyDuckHunt is a public beta. This is an acceptance plan, not a release calendar.
+Completed implementation and automated tests do not replace live validation.
+
+## Before a release
+
+These gates remain open until maintainers record evidence for a candidate commit.
+The current version remains `0.1.0-dev`; no release is scheduled.
+
+| Priority | Work remaining | Completion evidence |
+| --- | --- | --- |
+| 1 | Finish the English live pilot alongside the French beta | Same source commit; separate configuration/state; player commands, shop, notices, Owner planning and restart observed in both languages. |
+| 1 | Rehearse installation and updates on a fresh supported Linux host | Follow the public guide as a new operator in `en` and `fr`; record OS/Python, READY, graceful stop, recovery and rollback outcome. |
+| 1 | Make systemd setup portable | Remove dependence on the original pilot account and paths from the install procedure; verify isolated services and writable directories on another host. |
+| 1 | Validate distribution artifacts | Build source/wheel artifacts; install outside the checkout; check entry point, translations, license and matching version metadata. Current editable-install CI is only part of this work. |
+| 2 | Complete gameplay and translation feedback | Resolve reproducible beta issues; confirm item promises, timing, fatigue and accuracy text against actual behavior. |
+| 2 | Finish operational acceptance | Rehearse reconnect, coherent backup/recovery, update and rollback; retain private evidence without publishing player data. |
+| Final | Review a release candidate | Full suite and GitHub CI green on that revision, remaining issues triaged, release notes and explicit maintainer approval. |
+
+For each gate record the commit, environment, procedure, result and remaining
+limitations. Keep raw logs and identities private. See [release workflow](RELEASING.md).
+
+## Recent beta improvements
+
+- [x] Fixed daily base of 24 flights with durable, private planning.
+- [x] Bread and duck-call behavior aligned with the retained Tcl 2.11 rules.
+- [x] Fatigue, thermos, scope and shot feedback made consistent with game state.
+- [x] English/French presentation and explicit installer language selection.
+- [x] Shared-source language isolation and deterministic regression contracts.
+
 ## Foundation
 
 - [x] Python package skeleton.

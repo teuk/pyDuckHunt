@@ -25,7 +25,27 @@ body:
         - Partyline
         - Packaging and service
         - Documentation
+        - Translation or message language
         - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version and launch method (foreground or systemd). No server address or private configuration is needed.
+      placeholder: Linux distribution, Python 3.x, foreground pilot
+    validations:
+      required: true
+  - type: dropdown
+    id: language
+    attributes:
+      label: Message language
+      options:
+        - English (en)
+        - French (fr)
+        - Both
+        - Not applicable
     validations:
       required: true
   - type: textarea

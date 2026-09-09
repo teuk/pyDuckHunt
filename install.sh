@@ -127,4 +127,5 @@ fi
 printf 'CONFIGURATION=%s state=%s\n' "$configuration" "$configuration_state"
 printf '[OK] pyDuckHunt beta installed locally.\n'
 printf '[INFO] No IRC connection, service installation or process start was performed.\n'
-printf '[INFO] Review docs/INSTALL.md and keep game.enabled=false until pilot-check succeeds.\n'
+printf '[INFO] Next: docs/INSTALL.md#configure-and-start. Review the target, then set game.enabled=true before pilot-check.\n'
+printf '[INFO] pilot-check opens no connection; launching the bot is a separate step.\n'

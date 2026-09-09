@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Installation and troubleshooting
+    url: https://github.com/teuk/pyDuckHunt/blob/main/docs/TROUBLESHOOTING.md
+    about: Check language settings, first launch and common problems before reporting a bug.
   - name: Private security report
     url: https://github.com/teuk/pyDuckHunt/security/advisories/new
     about: Report vulnerabilities privately; never post credentials or private IRC data.

@@ -21,9 +21,7 @@ body:
     id: replay
     attributes:
       label: Determinism and replay
-      description: Identify any clock, random, network or persistence boundary involved.
-    validations:
-      required: true
+      description: Optional technical context. If known, identify a clock, random, network or persistence boundary; player suggestions do not need an implementation plan.
   - type: checkboxes
     id: safety
     attributes:

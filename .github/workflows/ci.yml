@@ -82,9 +82,13 @@ jobs:
         run: python tools/validate.py --lane full --progress
 
   package:
-    name: Package smoke test
+    name: Install ${{ matrix.language }} / Python 3.13
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [en, fr]
 
     steps:
       - name: Check out source
@@ -96,7 +100,29 @@ jobs:
           python-version: "3.13"
 
       - name: Run the safe beta installer
-        run: ./install.sh
+        run: ./install.sh --language ${{ matrix.language }}
 
       - name: Exercise installed command
         run: .venv/bin/pyduckhunt --help
+
+      - name: Check installed package and disabled private configuration
+        run: .venv/bin/python -B tools/check_installed.py --language ${{ matrix.language }}
+
+      - name: Preserve configuration on reinstall and reject a conflicting language
+        env:
+          EXPECTED_LANGUAGE: ${{ matrix.language }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          saved_config="$RUNNER_TEMP/pyduckhunt-config-before.toml"
+          install -m 600 config/pyduckhunt.toml "$saved_config"
+          ./install.sh
+          cmp --silent "$saved_config" config/pyduckhunt.toml
+          other_language=en
+          if [[ "$EXPECTED_LANGUAGE" == en ]]; then other_language=fr; fi
+          if ./install.sh --language "$other_language"; then
+            echo '[KO] Conflicting language was accepted.'
+            exit 1
+          fi
+          cmp --silent "$saved_config" config/pyduckhunt.toml
+          .venv/bin/python -B tools/check_installed.py --language "$EXPECTED_LANGUAGE"

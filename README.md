@@ -9,6 +9,9 @@ A Duck Hunt game bot for IRC, with **English and French messages**, persistent
 scores, a shop and private administrator tools. Both languages share the same
 game rules and code.
 
+[Install](#install-in-english) · [Documentation](docs/README.md) ·
+[Roadmap](docs/ROADMAP.md) · [Report a bug](https://github.com/teuk/pyDuckHunt/issues/new/choose)
+
 ## Install in English
 
 Requires **Python 3.11+**, its `venv` module and Git. Run as your normal bot
@@ -30,18 +33,10 @@ to enable the game and launch it. No system service is installed automatically.
 **French:** use `./install.sh --language fr`. French is also the default for a
 new installation when `--language` is omitted.
 
-### Switching an existing instance to English
-
-Update the existing `[game]` section in **that instance's private configuration**:
-
-```toml
-language = "en"
-```
-
-Then restart that instance. Scores, inventory and scheduled flights are
-preserved. Re-running the installer never overwrites an existing configuration;
-it refuses an explicit language choice that conflicts with it.
-See [language settings](docs/LANGUAGES.md) for separate FR/EN instances.
+**Already installed?** Set `language = "en"` in the existing `[game]` section
+of your instance's private configuration, then restart it. Scores and inventory
+are preserved. See [switching languages](docs/INSTALL.md#change-the-language-of-an-existing-instance).
+The installer preserves existing configuration and refuses a conflicting language choice.
 
 ## Play
 
@@ -62,17 +57,21 @@ and [channel items](docs/CHANNEL_ACTIONS.md) for the details.
 
 ## Documentation
 
-- [Installation, first launch and updates](docs/INSTALL.md)
-- [Configuration](docs/CONFIGURATION.md) · [Languages](docs/LANGUAGES.md)
-- [Partyline and Owner commands](docs/PARTYLINE.md)
-- [Systemd service setup](docs/SYSTEMD_SERVICE.md)
-- [Web rankings](docs/RANKING_PAGE.md) · [Metrics](docs/METRICS_GRAFANA.md)
-- [Architecture](docs/ARCHITECTURE.md) · [Changelog](CHANGELOG.md)
+| You want to… | Start here |
+| --- | --- |
+| Install, configure or update a bot | [Installation](docs/INSTALL.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) |
+| Understand the game | [Player profiles](docs/PLAYER_PROFILE.md) · [Shop](docs/SHOP.md) |
+| Run and administer an instance | [Operator guides](docs/README.md#run-and-administer) |
+| Fix a bug or improve a translation | [Contributing](CONTRIBUTING.md) · [Languages](docs/LANGUAGES.md) |
+
+[All documentation](docs/README.md) · [Changelog](CHANGELOG.md) · [Security](SECURITY.md)
 
 ## Beta status
 
 This is **beta software**, distributed from `main`, and no tag or GitHub Release
 has been published yet. Back up your private configuration and state before updating.
+The [roadmap](docs/ROADMAP.md#before-a-release) lists the remaining acceptance
+work; there is no release date yet. Linux is the current deployment target.
 
 For development validation:
 
