@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from pyduckhunt.game.bread import bread_identifiers, preserved_bread_deadline, MAX_CHANNEL_BREAD
+from pyduckhunt.game.bread import active_channel_breads, bread_identifiers, preserved_bread_deadline, MAX_CHANNEL_BREAD
+from pyduckhunt.game.catalog import validate_active_effect
 from pyduckhunt.game.commands import Command, CommandKind
 from pyduckhunt.game.engine import advance_time, apply_command, start_flight
 from pyduckhunt.game.karma import player_karma_basis_points
@@ -212,7 +213,11 @@ def install_daily_schedule(
     advanced = advance_time(state, now_ns)
     current = advanced.state.daily_schedule
     if current is not None:
-        validate_daily_schedule_state(current, allow_bread=state.bread_plan_effect_ids is not None)
+        validate_daily_schedule_state(
+            current,
+            allow_bread=(state.bread_policy_version == 1
+                         and state.bread_plan_effect_ids is not None),
+        )
         if current.day_start_ns == day_start_ns:
             if current.deadlines_ns != deadlines_ns:
                 raise ValueError("installed day cannot be replaced with different entropy")
@@ -235,14 +240,69 @@ def enable_hourly_bread(state: GameState, now_ns: int) -> Transition:
     # Activate at the durable clock without expiring or replaying a live flight.
     if now_ns != state.now_ns:
         raise ValueError("bread activation must use the current durable clock")
+    if state.bread_policy_version >= 2:
+        return Transition(state, ())
     if state.bread_plan_effect_ids is not None:
         return Transition(state, ())
     return Transition(replace(state, bread_plan_effect_ids=()), ())
 
 
+def migrate_bread_policy(state: GameState, now_ns: int) -> Transition:
+    """Retire hourly bread without losing paid pieces or today's progress."""
+
+    if state.bread_policy_version != 1:
+        raise ValueError("bread policy migration requires a legacy state")
+    advanced = advance_time(state, now_ns)
+    current = advanced.state
+    breads = active_channel_breads(current, now_ns)
+    migrated_effects = []
+    for index, effect in enumerate(breads):
+        assert effect.expires_at_ns is not None
+        remaining_ns = effect.expires_at_ns - now_ns
+        due_at_ns = min(
+            effect.expires_at_ns - 1,
+            now_ns + max(1, remaining_ns * (index + 1) // (len(breads) + 1)),
+        )
+        migrated = replace(effect, magnitude=due_at_ns)
+        validate_active_effect(migrated)
+        migrated_effects.append(migrated)
+    bread_ids = {effect.effect_id for effect in breads}
+    effects = tuple(
+        sorted(
+            (
+                *(
+                    effect
+                    for effect in current.effects
+                    if effect.effect_id not in bread_ids
+                ),
+                *migrated_effects,
+            ),
+            key=lambda effect: effect.effect_id,
+        )
+    )
+    schedule = current.daily_schedule
+    if schedule is not None and len(schedule.deadlines_ns) > FIXED_DAILY_FLIGHT_COUNT:
+        deadlines = schedule.deadlines_ns[:FIXED_DAILY_FLIGHT_COUNT]
+        schedule = DailySchedule(
+            schedule.day_start_ns,
+            deadlines,
+            min(schedule.next_index, FIXED_DAILY_FLIGHT_COUNT),
+        )
+    return Transition(
+        replace(
+            current,
+            effects=effects,
+            daily_schedule=schedule,
+            bread_plan_effect_ids=(),
+            bread_policy_version=2,
+        ),
+        advanced.outcomes,
+    )
+
+
 def replan_bread_schedule(state: GameState, now_ns: int, day_start_ns: int,
                           deadlines_ns: tuple[int, ...]) -> Transition:
-    if state.bread_plan_effect_ids is None:
+    if state.bread_policy_version != 1 or state.bread_plan_effect_ids is None:
         raise ValueError("hourly bread must be enabled before replanning")
     validate_daily_schedule(day_start_ns, deadlines_ns, allow_bread=True)
     if not day_start_ns <= now_ns < day_start_ns + DAY_NS:
@@ -278,7 +338,11 @@ def tick_daily_schedule(
     schedule = advanced.state.daily_schedule
     if schedule is None:
         raise ValueError("schedule tick requires an installed daily schedule")
-    validate_daily_schedule_state(schedule, allow_bread=state.bread_plan_effect_ids is not None)
+    validate_daily_schedule_state(
+        schedule,
+        allow_bread=(state.bread_policy_version == 1
+                     and state.bread_plan_effect_ids is not None),
+    )
     if selection is not None and not isinstance(selection, FlightSelection):
         raise ValueError("schedule selection must satisfy the runtime contract")
 

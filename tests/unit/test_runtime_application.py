@@ -72,8 +72,16 @@ class IRCGameBridgeTests(unittest.TestCase):
             self.runtime.close(2)
 
     @staticmethod
-    def message(text: str, *, command: str = "PRIVMSG", channel: str = "#pond"):
-        return parse_irc_line(f":Hunter!u@example {command} {channel} :{text}")
+    def message(
+        text: str,
+        *,
+        nickname: str = "Hunter",
+        command: str = "PRIVMSG",
+        channel: str = "#pond",
+    ):
+        return parse_irc_line(
+            f":{nickname}!u@example {command} {channel} :{text}"
+        )
 
     def test_query_is_rendered_enqueued_and_persisted(self) -> None:
         result = self.bridge.handle(1, self.message("!duckstats"))
@@ -118,6 +126,24 @@ class IRCGameBridgeTests(unittest.TestCase):
 
         ranking = self.bridge.handle(4, self.message("!duckrank 5"))
         self.assertTrue(ranking.priority_batch[0].startswith(b"PRIVMSG #pond :"))
+
+    def test_two_players_never_receive_each_others_private_queries(self) -> None:
+        hunter = self.bridge.handle(1, self.message("!duckstats"))
+        guest = self.bridge.handle(
+            2,
+            self.message("!inventory", nickname="Guest"),
+        )
+        self.assertTrue(hunter.priority_batch)
+        self.assertTrue(guest.priority_batch)
+        self.assertTrue(
+            all(wire.startswith(b"NOTICE Hunter :") for wire in hunter.priority_batch)
+        )
+        self.assertTrue(
+            all(wire.startswith(b"NOTICE Guest :") for wire in guest.priority_batch)
+        )
+        self.assertFalse(
+            any(wire.startswith(b"PRIVMSG #pond :") for wire in (*hunter.priority_batch, *guest.priority_batch))
+        )
 
     def test_configured_shop_url_reaches_the_private_notice(self) -> None:
         bridge = IRCGameBridge(
@@ -207,13 +233,13 @@ class IRCGameBridgeTests(unittest.TestCase):
         self.assertEqual(scheduling.step(199).next_deadline_ns, 200)
         scheduling.step(200)
 
-        self.assertEqual(len(self.runtime.state.effects), 1)
+        self.assertEqual(self.runtime.state.effects, ())
         self.assertEqual(self.runtime.state.scheduled_actions, ())
         assert self.runtime.state.flight is not None
         self.assertEqual(self.runtime.state.flight.spawned_at_ns, 200)
         self.assertEqual(self.runtime.state.flight.expires_at_ns, 200 + 320_000_000_000)
-        self.assertIn(b"20s par morceau", bread.priority_batch[0])
-        self.assertNotIn(
+        self.assertIn(b"premier envol consomme un morceau", bread.priority_batch[0])
+        self.assertIn(
             "Le canard mange un morceau de pain posé sur le canal.".encode(),
             b" ".join(wire for batch in self.batches for wire in batch if wire.startswith(b"PRIVMSG #pond :")),
         )

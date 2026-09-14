@@ -53,7 +53,7 @@ class ChannelActionTests(unittest.TestCase):
             100 + 10 * MINUTE_NS,
         )
 
-    def test_due_action_is_emitted_at_exact_deadline(self) -> None:
+    def test_due_action_waits_until_a_matching_flight_starts(self) -> None:
         deadline = 100 + MINUTE_NS
         bought = purchase(
             funded_state(),
@@ -65,9 +65,12 @@ class ChannelActionTests(unittest.TestCase):
         before = advance_time(bought.state, deadline - 1)
         self.assertEqual(len(before.state.scheduled_actions), 1)
         due = advance_time(before.state, deadline)
-        self.assertEqual(due.state.scheduled_actions, ())
-        self.assertEqual(due.outcomes[-1].kind, OutcomeKind.CHANNEL_ACTION_DUE)
-        self.assertEqual(due.outcomes[-1].action_id, 1)
+        self.assertEqual(len(due.state.scheduled_actions), 1)
+        self.assertNotIn(OutcomeKind.CHANNEL_ACTION_DUE, [outcome.kind for outcome in due.outcomes])
+        started = start_flight(due.state, deadline, lifetime_ns=1_000)
+        self.assertEqual(started.state.scheduled_actions, ())
+        self.assertEqual(started.outcomes[-1].kind, OutcomeKind.CHANNEL_ACTION_DUE)
+        self.assertEqual(started.outcomes[-1].action_id, 1)
 
     def test_detector_is_consumed_by_next_flight(self) -> None:
         bought = purchase(funded_state(), "Hunter", 22, 100)

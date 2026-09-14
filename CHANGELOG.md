@@ -3,7 +3,14 @@
 All notable changes to pyDuckHunt are documented here. The project remains beta;
 these changes do not create a stable release or a tag.
 
-## Unreleased
+## 0.2.0-dev — Unreleased
+
+### Development line
+
+- Advance the public beta development line from 0.1.0-dev to 0.2.0-dev for
+  the fixed 24-flight schedule, one-bread/one-flight contract, schema-24
+  persistence and bilingual operation. This remains an untagged development
+  version rather than a stable release.
 
 ### Public beta onboarding and release preparation
 
@@ -35,23 +42,30 @@ these changes do not create a stable release or a tag.
 
 - Fix the daily base at 24 flights regardless of activity, retaining replay of
   historical 18- and 21-flight plans. Upgrade those plans with future slots.
-- Restore Tcl 2.11 method-2 bread: each piece lasts one hour across flights
-  and adds 20 seconds to every new duck's lifetime. Adding or expiring bread
-  redraws 24 + active-piece slots (up to 20 pieces); preserve the next deadline
-  on addition and partial expiry. An existing duck's deadline stays unchanged.
-  Attraction does not guarantee an extra flight during the bread's hour.
-- Apply the same item effects to player purchases and Owner commands. Bread
-  retains its 4 XP price and +2 temporary karma; no takeoff consumes a piece.
+- Correct live bread semantics after comparing production traces with Tcl 2.11:
+  every piece lasts at most one hour, schedules one attraction attempt and is
+  consumed by the first later takeoff. That duck alone stays 20 seconds longer.
+  Two pieces therefore cover at most two flights instead of surviving both.
+- Keep the daily plan at exactly 24 slots while bread attractions remain separate
+  durable deadlines. Buying, consuming or expiring bread no longer redraws the
+  whole day, creates misleading 25–44-slot plans or wakes only to report expiry.
+- Drop expired attractions from the observed wake-up calculation, including
+  after persistence backpressure at the end of a completed daily plan.
+- Apply the same rule to 4-XP player purchases, free Owner bread and baker-amulet
+  bread. Player purchases retain +2 temporary karma and the 20-piece channel cap.
 - Wake paid duck calls and mechanical actions at their recorded deadlines,
   keep them while another flight is active, and consume one only when its
-  matching flight starts. Bread expiry and replanning cannot discard a call.
+  matching flight starts. A due call takes precedence over a bread attraction;
+  its successful takeoff can consume the oldest bread without creating two ducks.
 - Bind Owner permissions to the IRC account or registered ident@host rather
   than the current nickname. Owner bread and call replies, including refusals,
   stay private. Player replies expose no exact future flight time.
 - Add Owner-only channel/PM duckplanning NOTICE views and partyline
-  `.duckplanning`, listing every slot in Europe/Paris, actual wake-up, pending
-  actions and bread expiry. Refresh partyline/debug facts when those change;
-  elapsed slots in a redrawn plan are not presented as real hunting history.
+  `.duckplanning`, listing the 24 slots, separate bread attractions, pending
+  actions, active flight and expirations in Europe/Paris. Use “processed slots”
+  rather than implying that every elapsed deadline produced a flight.
+- Keep `!duckstats` and `!inventory` private per requester and add a two-player
+  routing regression so one player never receives another player's reply.
 
 ### Accuracy, fatigue and shot feedback
 
@@ -78,9 +92,11 @@ these changes do not create a stable release or a tag.
   partyline, generated ranking and aggregate metrics, without deleting history.
 - Give the generated ranking a hover/focus/touch inventory view, eleven compact
   desktop columns and responsive player cards without hidden statistics.
-- Extend persistence through schema 23 for Owner channel items, hourly bread,
+- Extend persistence through schema 24 for one-shot bread attractions while
+  retaining Owner channel items, historical hourly bread,
   settled fatigue/scope rules and counted duck noise. Preserve historical
-  outcomes and authoritative schema-21/22 checkpoints; new counters survive restart.
+  outcomes and authoritative schema-21/22/23 checkpoints; the first scheduler
+  pass records one migration without editing prior snapshots or journal entries.
 - Update configuration examples and game/operator documentation. The separately
   deployed shop catalog follows the bread, scope and thermos descriptions in
   `docs/SHOP.md`; its static deployment assets are outside this repository.

@@ -67,8 +67,9 @@ prices use nearest-integer half-up settlement, so a 50-percent coupon prices a
 7-point item at 4 points. Only one promotion coupon may remain active. The
 blessing amulet consumes its sole use to neutralize the next acquired curse.
 Endurance suppresses fatigue gain for 24 hours. Baker and prankster effects
-respectively add one hour of channel bread or schedule a mechanical target at
-exactly ten minutes after every later kill.
+respectively add channel bread with an attraction ten minutes after each later
+kill, or schedule a mechanical target at exactly ten minutes. Baker bread still
+expires after one hour and is consumed by the first takeoff.
 
 Hundred-hit milestones grant 50, 75, 100 and 125 credit at 100 through 400
 kills, then 150 credit at every later hundred. The award is committed inside

@@ -143,5 +143,6 @@ roll. Profile and inventory use the same live formula; a subsequent level
 change updates it without restoring any uses. Zero is displayed as +0.
 
 Bread inventory includes the relative time until the first remaining stack
-expires. No player-facing daily flight deadline is disclosed. Owner planning
-shows expiry risks privately and never promises consumption of absent bread.
+expires and states that one piece applies to one flight. No player-facing exact
+attraction or daily-flight deadline is disclosed. Owner planning shows separate
+attraction and expiry times privately and never promises absent bread.

@@ -126,7 +126,10 @@ def _advance(state: GameState, now_ns: int) -> Transition:
     pending_actions = []
     due_actions = []
     for action in state.scheduled_actions:
-        if state.bread_plan_effect_ids is not None and action.item_id in (20, 23):
+        if (
+            (state.bread_policy_version >= 2 or state.bread_plan_effect_ids is not None)
+            and action.item_id in (20, 23)
+        ):
             # Channel calls wait durably until a matching flight really starts.
             # A bread expiry/replan must never discard a pending paid call.
             pending_actions.append(action)
@@ -191,9 +194,30 @@ def start_flight(
             + (Outcome(OutcomeKind.FLIGHT_ALREADY_ACTIVE, flight_id=current.flight.flight_id),),
         )
 
-    hourly_bread = current.bread_plan_effect_ids is not None
-    bread_delay_ns = (len(active_channel_breads(current, now_ns)) * BREAD_DELAY_NS
-                      if hourly_bread else 0)
+    hourly_bread = (
+        current.bread_policy_version == 1
+        and current.bread_plan_effect_ids is not None
+    )
+    active_breads = active_channel_breads(current, now_ns)
+    bread = None if hourly_bread else min(
+        active_breads,
+        key=lambda effect: (effect.activated_at_ns, effect.effect_id),
+        default=None,
+    )
+    bread_delay_ns = (
+        len(active_breads) * BREAD_DELAY_NS
+        if hourly_bread
+        else BREAD_DELAY_NS
+        if bread is not None and current.bread_policy_version >= 2
+        else 0
+    )
+    bread_piece_count = (
+        len(active_breads)
+        if hourly_bread
+        else 1
+        if bread is not None and current.bread_policy_version >= 2
+        else 0
+    )
     flight = FlightState(
         flight_id=current.next_flight_id,
         spawned_at_ns=now_ns,
@@ -207,18 +231,6 @@ def start_flight(
         current,
         flight=flight,
         next_flight_id=current.next_flight_id + 1,
-    )
-    bread = min(
-        (
-            effect
-            for effect in next_state.effects
-            if not hourly_bread and effect.item_id == 21
-            and effect.key == "channel_bread"
-            and effect.scope is EffectScope.CHANNEL
-            and effect.owner_key is None
-        ),
-        key=lambda effect: (effect.activated_at_ns, effect.effect_id),
-        default=None,
     )
     consumed = (
         ()
@@ -251,7 +263,7 @@ def start_flight(
             retained_effects.append(effect)
     next_state = replace(next_state, effects=tuple(retained_effects))
     action_outcomes = ()
-    if hourly_bread:
+    if current.bread_policy_version >= 2 or current.bread_plan_effect_ids is not None:
         matching_item = 23 if kind is FlightKind.MECHANICAL else 20 if kind is FlightKind.STANDARD else None
         action = min((a for a in next_state.scheduled_actions
                       if a.item_id == matching_item and a.due_at_ns <= now_ns),
@@ -271,8 +283,8 @@ def start_flight(
                 OutcomeKind.FLIGHT_STARTED,
                 flight_id=flight.flight_id,
                 flight_kind=flight.kind,
-                channel_effect_count=(len(active_channel_breads(current, now_ns)) or None) if hourly_bread else None,
-                effect_magnitude=bread_delay_ns // 1_000_000_000 if hourly_bread else None,
+                channel_effect_count=(bread_piece_count or None),
+                effect_magnitude=(bread_delay_ns // 1_000_000_000 or None),
             ),
         )
         + consumed
@@ -408,6 +420,11 @@ def _apply_kill_reward_triggers(
 
     outcomes: list[Outcome] = []
     if baker is not None:
+        attraction_at_ns = (
+            now_ns + 10 * MINUTE_NS
+            if state.bread_policy_version >= 2
+            else None
+        )
         bread = ActiveEffect(
             effect_id=state.next_effect_id,
             item_id=21,
@@ -417,6 +434,7 @@ def _apply_kill_reward_triggers(
             source_key=None,
             activated_at_ns=now_ns,
             expires_at_ns=now_ns + HOUR_NS,
+            magnitude=attraction_at_ns,
         )
         validate_active_effect(bread)
         state = replace(

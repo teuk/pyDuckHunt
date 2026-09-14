@@ -159,7 +159,7 @@ New live shots record the formula result, including for previously equipped
 scopes. Existing snapshots/effect magnitudes and remaining uses stay unchanged.
 Keep the new reader once an event containing this field has been written.
 
-## Hourly bread rule (schema 22)
+## Historical hourly bread rule (schema 22)
 
 `enable_hourly_bread` activates the new rule at the current durable clock. It
 changes no player, flight, effect, action or existing schedule. The optional
@@ -186,3 +186,19 @@ scores, inventory, bread, schedules or active flight deadlines. A flight already
 active at deployment starts its counter on the next eligible miss; earlier
 noise is not guessed. Restart and replay retain subsequently recorded misses.
 Old shot events still use their original `frighten_on_miss` decision.
+
+## One-flight bread attractions (schema 24)
+
+New states carry `bread_policy_version=2`. Each new channel-bread effect stores
+its settled attraction deadline in the existing integer `magnitude` field; that
+deadline is strictly after activation and before the one-hour expiry. The first
+later takeoff consumes the oldest active piece and extends only that flight by
+20 seconds. The 24-slot daily schedule is not redrawn.
+
+Schemas 23 and older decode with policy version 1 so their snapshots and events
+retain their historical result during recovery. Before normal live scheduling,
+one `migrate_bread_policy` event moves the recovered state to version 2. Active
+bread receives deterministic, staggered attraction deadlines inside its remaining
+lifetime. An expanded hourly-bread plan is reduced to 24 slots while preserving
+the processed cursor. The migration edits neither the checkpoint nor preceding
+journal bytes and is replayable after restart.

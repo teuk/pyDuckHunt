@@ -19,6 +19,7 @@ from pyduckhunt.game.runtime import (
     apply_runtime_purchase,
     expand_daily_schedule,
     enable_hourly_bread,
+    migrate_bread_policy,
     replan_bread_schedule,
     install_daily_schedule,
     tick_daily_schedule,
@@ -43,6 +44,8 @@ class ReplayResult:
 
 
 def apply_replay_event(state: GameState, event: ReplayEvent) -> Transition:
+    if event.kind is EventKind.MIGRATE_BREAD_POLICY:
+        return migrate_bread_policy(state, event.now_ns)
     if event.kind is EventKind.ENABLE_HOURLY_BREAD:
         return enable_hourly_bread(state, event.now_ns)
     if event.kind is EventKind.REPLAN_BREAD_SCHEDULE:

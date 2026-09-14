@@ -137,6 +137,7 @@ class ProfileCodecTests(unittest.TestCase):
 
     def test_schema_11_profile_defaults_the_new_counter_for_migration(self) -> None:
         payload = encode_game_state(state_with_profile())
+        del payload["bread_policy_version"]
         del payload["last_flight"]
         del payload["last_shooter_key"]
         for field in (
@@ -161,6 +162,7 @@ class ProfileCodecTests(unittest.TestCase):
 
     def test_schema_12_profile_defaults_complete_karma_state(self) -> None:
         payload = encode_game_state(state_with_profile())
+        del payload["bread_policy_version"]
         del payload["last_flight"]
         del payload["last_shooter_key"]
         for field in (
@@ -186,6 +188,7 @@ class ProfileCodecTests(unittest.TestCase):
 
     def test_schema_19_profile_defaults_reference_counters_for_full_replay(self) -> None:
         payload = encode_game_state(state_with_profile())
+        del payload["bread_policy_version"]
         for field in ("experience_spent", "jams", "shots_fired"):
             del payload["players"][0][field]
         migrated = decode_game_state(payload, schema_version=19)

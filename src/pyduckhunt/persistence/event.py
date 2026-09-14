@@ -32,6 +32,7 @@ from pyduckhunt.persistence.codec import CodecError
 
 class EventKind(str, Enum):
     ENABLE_HOURLY_BREAD = "enable_hourly_bread"
+    MIGRATE_BREAD_POLICY = "migrate_bread_policy"
     REPLAN_BREAD_SCHEDULE = "replan_bread_schedule"
     START_FLIGHT = "start_flight"
     COMMAND = "command"
@@ -638,6 +639,10 @@ class ReplayEvent:
         return cls(EventKind.ENABLE_HOURLY_BREAD, now_ns)
 
     @classmethod
+    def migrate_bread_policy(cls, now_ns: int) -> ReplayEvent:
+        return cls(EventKind.MIGRATE_BREAD_POLICY, now_ns)
+
+    @classmethod
     def schedule_tick(
         cls,
         now_ns: int,
@@ -937,7 +942,11 @@ class ReplayEvent:
             except (TypeError, ValueError) as error:
                 raise CodecError("schedule tick settlement is invalid") from error
 
-        if kind in (EventKind.ADVANCE_TIME, EventKind.ENABLE_HOURLY_BREAD):
+        if kind in (
+            EventKind.ADVANCE_TIME,
+            EventKind.ENABLE_HOURLY_BREAD,
+            EventKind.MIGRATE_BREAD_POLICY,
+        ):
             if set(raw) != {"kind", "now_ns"}:
                 raise CodecError("advance_time event fields differ from schema")
             return cls(kind, now_ns)

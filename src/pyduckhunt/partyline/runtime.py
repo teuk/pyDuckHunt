@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 from zoneinfo import ZoneInfo
 
-from pyduckhunt.game.bread import active_channel_breads
+from pyduckhunt.game.bread import active_channel_breads, bread_attraction_deadline
 from pyduckhunt.configuration import PartylineConfiguration
 from pyduckhunt.game.admin import (
     PlayerAdministrationError,
@@ -560,10 +560,9 @@ class PartylineController:
             )
             return
         item_id = 20 if command == "!appeau" else 21
-        scheduled_for_ns = (
-            self._integer_source(now_ns + 1, now_ns + 10 * MINUTE_NS)
-            if item_id == 20
-            else None
+        scheduled_for_ns = self._integer_source(
+            now_ns + 1,
+            now_ns + (10 * MINUTE_NS if item_id == 20 else 60 * MINUTE_NS - 1),
         )
         try:
             event = ReplayEvent.admin_channel_item(
@@ -602,11 +601,15 @@ class PartylineController:
                     and effect.owner_key is None
                 )
                 bread = tr('morceau') if count == 1 else tr('morceaux')
-                message_text = (
-                    tr('{0} > Tu déposes un morceau de pain sur {1}. Il y a actuellement {2} {3} de pain. ', owner.handle, channel, count, bread)
-                    + (tr('Actif 1h, conservé à chaque envol. Attraction renforcée ; départ des nouveaux canards retardé de {0}s.', 20 * count)
-                       if transition.state.bread_plan_effect_ids is not None else
-                       tr('Disponible 1h ; un morceau consommé par envol s’il est encore valide. Le prochain envol quotidien ne change pas.'))
+                message_text = tr(
+                    '{0} > Tu déposes un morceau de pain sur {1}. Il y a actuellement {2} {3} de pain. '
+                    'Attraction prévue : {4}. Le premier envol consommera un morceau et restera 20s de plus ; '
+                    'expiration au bout de 1h. Le planning quotidien reste à 24 créneaux.',
+                    owner.handle,
+                    channel,
+                    count,
+                    bread,
+                    _paris(scheduled_for_ns),
                 )
             return render_wire_notice(message.nickname, (message_text,))
 
@@ -1781,8 +1784,7 @@ class PartylineController:
             lines.append(
                 f"Duckplanning {channel} — Europe/Paris — "
                 f"{schedule.next_index}/{len(schedule.deadlines_ns)} "
-                + (tr('échéances passées du plan actuel.') if state.bread_plan_effect_ids is not None
-                   else tr('créneaux traités.'))
+                + tr('créneaux traités.')
             )
             entries = tuple(
                 f"{index + 1:02d}{'✓' if index < schedule.next_index else '→' if index == schedule.next_index else '·'}"
@@ -1803,9 +1805,13 @@ class PartylineController:
             )
         )
         active_breads = active_channel_breads(state, now_ns)
-        hourly_bread = state.bread_plan_effect_ids is not None
-        if hourly_bread:
-            lines.append(tr("Base=24 vols/jour | pains actifs={0} | attraction : plan à {1} créneaux (sans garantie d'envol pendant l'heure).", len(active_breads), 24 + min(20, len(active_breads))))
+        bread_attractions = tuple(
+            sorted(
+                deadline
+                for effect in active_breads
+                if (deadline := bread_attraction_deadline(effect)) is not None
+            )
+        )
         if state.flight is not None and now_ns < state.flight.expires_at_ns:
             wake_candidates = tuple(
                 value
@@ -1814,14 +1820,11 @@ class PartylineController:
             )
         else:
             action_next_ns = None if not actions else actions[0].due_at_ns
+            bread_next_ns = min(bread_attractions, default=None)
             wake_candidates = tuple(
-                value
-                for value in (daily_next_ns, action_next_ns)
+                value for value in (daily_next_ns, action_next_ns, bread_next_ns)
                 if value is not None
             )
-        if hourly_bread:
-            wake_candidates += tuple(e.expires_at_ns for e in active_breads
-                                     if e.expires_at_ns is not None)
         wake_ns = min(wake_candidates) if wake_candidates else None
         flight = (
             tr('aucun')
@@ -1829,13 +1832,12 @@ class PartylineController:
             else tr('#{0} fin={1}', state.flight.flight_id, _paris(state.flight.expires_at_ns))
         )
         lines.append(
-            tr('Prochain quotidien={0} | réveil effectif={1} | vol={2}.', _paris(daily_next_ns), _paris(wake_ns), flight)
+            tr('Prochain quotidien={0} | prochain événement={1} | vol={2}.', _paris(daily_next_ns), _paris(wake_ns), flight)
         )
         lines.append(
             tr('Pains={0} | appeaux/actions={1} | ', len(active_breads), len(actions))
             + (tr('aucun pain disponible.') if not active_breads else
-               tr('pain conservé à chaque envol ; +{0}s aux nouveaux vols.', 20 * len(active_breads))
-               if hourly_bread else tr('un morceau au plus par envol, uniquement avant son expiration.'))
+               tr('le prochain envol consomme un morceau et reste 20s de plus.'))
         )
         for action in actions:
             source = state.player(action.source_key or "")
@@ -1845,35 +1847,15 @@ class PartylineController:
                 tr('Action #{0}: {1}, auteur={2}, échéance={3}.', action.action_id, label, actor, _paris(action.due_at_ns))
             )
         if active_breads:
+            if bread_attractions:
+                lines.append(
+                    tr('Attractions des pains: {0}.', ', '.join(_paris(value) for value in bread_attractions))
+                )
             expirations = ", ".join(
                 _paris(effect.expires_at_ns) for effect in active_breads
             )
             lines.append(tr('Expiration des pains: {0}.', expirations))
-            # Only actual future flight slots/actions can consume bread. A day
-            # rollover or the end of an existing flight is not a new takeoff.
-            earliest_ns = max(now_ns, state.flight.expires_at_ns) if state.flight else now_ns
-            known_flights = ([] if schedule is None else [
-                deadline for deadline in schedule.deadlines_ns[schedule.next_index:]
-                if deadline >= earliest_ns
-            ])
-            known_flights.extend(max(earliest_ns, action.due_at_ns) for action in actions
-                                 if action.item_id in (20, 23))
-            if known_flights:
-                next_flight_ns = min(known_flights)
-                at_risk = sum(effect.expires_at_ns is not None
-                              and effect.expires_at_ns <= next_flight_ns
-                              for effect in active_breads)
-                if at_risk:
-                    lines.append(
-                        tr("Attention : {0}/{1} pain(s) expirent avant ou à la prochaine échéance d'envol connue ({2}). ", at_risk, len(active_breads), _paris(next_flight_ns))
-                        + (tr("L'attraction ne garantit pas un envol avant expiration.")
-                           if hourly_bread else tr('Seul un envol plus tôt pourrait les consommer.'))
-                    )
-            else:
-                lines.append(tr('Aucun prochain envol connu avant recalcul.') if hourly_bread else
-                             tr('Aucun prochain envol connu : consommation du pain non garantie.'))
-        lines.append(tr('Légende: ✓ échéance passée du plan actuel (pas un bilan de chasse) | → prochain | · à venir.')
-                     if hourly_bread else tr('Légende: ✓ traité | → prochain quotidien | · à venir.'))
+        lines.append(tr('Légende: ✓ traité | → prochain quotidien | · à venir.'))
         return tuple(lines)
 
     def _summary_lines(self) -> tuple[str, ...]:
@@ -2383,7 +2365,7 @@ _HELP_LINES = (
     tr('.status                         Coin, IRC, persistance et sessions'),
     tr('.dccstat                        IP, ports, offres et sessions DCC'),
     tr('.game                           vol, planning et état DuckHunt'),
-    tr('.duckplanning                   les 24 horaires, pains, appeaux et réveil effectif'),
+    tr('.duckplanning                   les 24 horaires, attractions et appeaux'),
     tr('.summary                        top 5, profils, inventaires et dernier tireur'),
     tr('.duck [#canal]                 lance un canard sans déplacer le planning'),
     tr('.goldenduck [#canal]           lance un canard doré (alias : .golden)'),

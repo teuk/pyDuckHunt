@@ -175,7 +175,7 @@ class OperatorPilotRunnerIntegrationTests(unittest.TestCase):
             runtime = pilot.shell.runtime
             runtime._state = replace(runtime.state, next_effect_id=2, effects=(
                 ActiveEffect(1, 21, "channel_bread", EffectScope.CHANNEL,
-                             None, None, 0, expires_at_ns=10),))
+                             None, None, 0, expires_at_ns=10, magnitude=5),))
             original = runtime.state
             status = ScheduleStatus(0, 24, 0, 60_000_000_000, 0, 24, False)
             waiting = ScheduleStepResult((), 60_000_000_000, status)
@@ -254,12 +254,12 @@ class OperatorPilotRunnerIntegrationTests(unittest.TestCase):
             self.assertEqual(result.state, ProcessShellState.STOPPED)
             self.assertTrue(runner.telemetry.ready_observed)
             self.assertEqual(runner.telemetry.ready_entries, 1)
-            self.assertEqual(runner.telemetry.schedule_accepted, 2)
+            self.assertEqual(runner.telemetry.schedule_accepted, 1)
             self.assertEqual(runner.telemetry.network_failures, 0)
             self.assertIsNotNone(pilot.shell.runtime.state.daily_schedule)
             records = JournalFile(root / "state" / "events.jsonl").read_records()
-            self.assertEqual(len(records), 2)
-            self.assertEqual(records[0].event.kind.value, "enable_hourly_bread")
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0].event.kind.value, "install_daily_schedule")
 
     def test_stop_requested_before_run_opens_no_stream(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

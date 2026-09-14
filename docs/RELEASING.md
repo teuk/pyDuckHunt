@@ -1,8 +1,8 @@
 # Releasing pyDuckHunt
 
-pyDuckHunt is currently a public beta. Until the beta exit criteria are met,
-`VERSION` remains `0.1.0-dev` and maintainers must not create a tag or GitHub
-Release.
+pyDuckHunt is currently a public beta on the `0.2.0-dev` development line.
+Until the beta exit criteria are met, `VERSION` remains a prerelease and
+maintainers must not create a tag or GitHub Release.
 
 pyDuckHunt remains development software until a stable version is explicitly
 approved. A normal commit must not create a tag or GitHub Release.

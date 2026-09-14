@@ -81,6 +81,7 @@ class CollectionAndCarryTests(unittest.TestCase):
         )
         payload = encode_game_state(state)
         self.assertEqual(decode_game_state(payload), state)
+        del payload["bread_policy_version"]
         del payload["last_flight"]
         del payload["last_shooter_key"]
         for field in (
@@ -400,6 +401,7 @@ class CollectionAndCarryTests(unittest.TestCase):
                 source_key=None,
                 activated_at_ns=1,
                 expires_at_ns=DAY_NS,
+                magnitude=index + 1,
             )
             for index in (1, 2)
         )

@@ -6,7 +6,7 @@ Completed implementation and automated tests do not replace live validation.
 ## Before a release
 
 These gates remain open until maintainers record evidence for a candidate commit.
-The current version remains `0.1.0-dev`; no release is scheduled.
+The current version is `0.2.0-dev`; no stable release is scheduled.
 
 | Priority | Work remaining | Completion evidence |
 | --- | --- | --- |
@@ -24,7 +24,8 @@ limitations. Keep raw logs and identities private. See [release workflow](RELEAS
 ## Recent beta improvements
 
 - [x] Fixed daily base of 24 flights with durable, private planning.
-- [x] Bread and duck-call behavior aligned with the retained Tcl 2.11 rules.
+- [x] Bread attraction and one-flight consumption corrected from live traces,
+  with Tcl 2.11 state and event replay retained for upgrades.
 - [x] Fatigue, thermos, scope and shot feedback made consistent with game state.
 - [x] English/French presentation and explicit installer language selection.
 - [x] Shared-source language isolation and deterministic regression contracts.

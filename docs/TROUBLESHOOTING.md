@@ -34,11 +34,12 @@ a duck just to gather diagnostics. Use a separate test channel for reproductions
 
 ## Bread, duck calls and accuracy
 
-Bread lasts up to one hour and remains present across flights; seeing it after
-a duck is shot is expected. It affects attraction and extends new flight
-lifetimes. A duck call requests an extra duck. Exact effects and private planning
-are described in [channel items](CHANNEL_ACTIONS.md); neither item is a promise
-that the next daily slot will move.
+Bread lasts up to one hour and schedules one attraction attempt. The first later
+takeoff consumes one piece and extends that duck's lifetime by 20 seconds. If a
+duck call or daily flight happens first, that takeoff consumes the bread and its
+separate attraction is cancelled. A bread still shown after a completed flight
+is therefore a defect worth reporting. Exact effects and private planning are
+described in [channel items](CHANNEL_ACTIONS.md); neither item moves a daily slot.
 
 For changing hit chances, inspect fatigue and active equipment in your profile
 and inventory. See [player profiles](PLAYER_PROFILE.md), [shop rules](SHOP.md)

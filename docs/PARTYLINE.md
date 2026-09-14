@@ -216,8 +216,9 @@ NOTICE, matching the command scope.
 
 `!pain` adds one stack of the same one-hour channel bread as `!shop 21`.
 `!appeau` schedules the same within-ten-minutes duck call as `!shop 20`.
-Neither command charges XP or creates a player profile. Bread updates attraction
-and redraws the plan; a duck call keeps its separate scheduled deadline. Each accepted action is attributed to the authenticated owner in an
+Neither command charges XP or creates a player profile. Bread receives one
+separate attraction deadline and never changes the 24-slot daily plan; a duck
+call keeps its own scheduled deadline. Each accepted action is attributed to the authenticated owner in an
 `admin_channel_item` journal event; unauthorized attempts remain silent.
 Both commands always acknowledge privately by NOTICE to the current authenticated
 sender nickname, including usage and refusal messages. The exact call deadline
@@ -226,14 +227,16 @@ flight. Channel observers receive no administrative item acknowledgement.
 
 Player purchases `!shop 20` and `!shop 21` retain public gameplay confirmations.
 An appeau reports only an approximate ten-minute window, as in Tcl 2.11; it never
-reveals a timestamp or the daily schedule. Live hourly bread remains in place at takeoff; no consumption message is emitted. Inventory and catalog queries remain
-private notices without exposing pending call deadlines.
+reveals a timestamp or the daily schedule. Bread reports its one-hour maximum,
+one attraction and one-flight consumption; the takeoff emits the ordinary bread
+consumption line. Inventory and catalog queries remain private notices without
+exposing pending call or attraction deadlines.
 
 `!duckplanning` is accepted only from the registered Owner in a joined channel
 and always answers privately by NOTICE. `/msg Coin duckplanning` provides the
 same private view. It lists every daily flight in Europe/Paris time, the daily
-cursor, effective runtime wake-up, active flight, bread stacks and every pending
-duck call. The partyline command `.duckplanning` renders the same view. Coin
+cursor, next runtime event, active flight, bread attractions/expirations and every
+pending duck call. The partyline command `.duckplanning` renders the same view. Coin
 also broadcasts the refreshed view to authenticated partyline sessions whenever
 the durable bread or channel-action set changes.
 
@@ -279,9 +282,9 @@ before the IRC adapter and any bind failure stops startup rather than silently
 running without the expected administration path. Shutdown closes partyline
 and DCC sockets before persistence is drained.
 
-With hourly bread enabled, `duckplanning` lists every time in the current plan,
-its 24-slot base and active-bread contribution. Passed times refer to the current
-redraw, not to a retrospective count of actual launches. Bread expiry appears
-in the effective wake-up time. Addition and expiration automatically refresh
-the private partyline plan. Owner `!pain` explains the one-hour lifetime and the
-20-second per-piece extension of subsequent flights, in private NOTICE only.
+`duckplanning` always lists the 24 daily times and marks them as processed or
+upcoming scheduling slots, not as a retrospective count of actual launches.
+Bread attractions and expirations appear on separate lines; expiry alone is not
+presented as an effective wake-up. Addition, consumption and expiration refresh
+the private partyline plan. Owner `!pain` explains its attraction, one-flight
+consumption and 20-second extension in private NOTICE only.

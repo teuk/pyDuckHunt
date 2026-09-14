@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from pyduckhunt.game.bread import active_channel_breads, MAX_CHANNEL_BREAD
-from pyduckhunt.game.catalog import GrantKind, shop_item
+from pyduckhunt.game.catalog import GrantKind, shop_item, validate_active_effect
 from pyduckhunt.game.engine import advance_time
 from pyduckhunt.game.model import (
     ActiveEffect,
@@ -194,6 +194,16 @@ def validate_admin_channel_item_request(
             raise PlayerAdministrationError(
                 "administrative channel action deadline is invalid"
             )
+    elif item_id == 21 and scheduled_for_ns is not None:
+        assert item.schedule_min_ns is not None and item.schedule_max_ns is not None
+        if type(scheduled_for_ns) is not int or not (
+            now_ns + item.schedule_min_ns
+            <= scheduled_for_ns
+            <= now_ns + item.schedule_max_ns
+        ):
+            raise PlayerAdministrationError(
+                "administrative bread attraction deadline is invalid"
+            )
     elif scheduled_for_ns is not None:
         raise PlayerAdministrationError(
             "administrative channel effect does not accept a deadline"
@@ -220,8 +230,7 @@ def apply_admin_channel_item(
     current = advance_time(state, now_ns).state
     item = shop_item(item_id)
     assert item is not None
-    if (item_id == 21 and current.bread_plan_effect_ids is not None
-            and len(active_channel_breads(current, now_ns)) >= MAX_CHANNEL_BREAD):
+    if item_id == 21 and len(active_channel_breads(current, now_ns)) >= MAX_CHANNEL_BREAD:
         raise PlayerAdministrationError("maximum channel bread reached (20)")
     if item.grant_kind is GrantKind.CHANNEL_ACTION:
         assert scheduled_for_ns is not None
@@ -240,6 +249,9 @@ def apply_admin_channel_item(
         )
     else:
         assert item.duration_ns is not None
+        if item_id == 21 and current.bread_policy_version >= 2:
+            assert item.schedule_max_ns is not None
+            scheduled_for_ns = scheduled_for_ns or now_ns + item.schedule_max_ns
         effect = ActiveEffect(
             effect_id=current.next_effect_id,
             item_id=item.item_id,
@@ -249,7 +261,10 @@ def apply_admin_channel_item(
             source_key=None,
             activated_at_ns=now_ns,
             expires_at_ns=now_ns + item.duration_ns,
+            magnitude=(scheduled_for_ns if item_id == 21
+                       and current.bread_policy_version >= 2 else None),
         )
+        validate_active_effect(effect)
         updated = replace(
             current,
             effects=tuple((*current.effects, effect)),

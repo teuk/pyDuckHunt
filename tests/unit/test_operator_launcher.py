@@ -269,7 +269,7 @@ class OperatorLauncherTests(unittest.TestCase):
             self.assertEqual(result.process.state, ProcessShellState.STOPPED)
             self.assertTrue(result.telemetry.ready_observed)
             self.assertEqual(result.telemetry.ready_entries, 1)
-            self.assertEqual(result.telemetry.schedule_accepted, 2)
+            self.assertEqual(result.telemetry.schedule_accepted, 1)
             self.assertEqual(result.telemetry.network_failures, 0)
             self.assertEqual(os.stat(result.log_path).st_mode & 0o777, 0o644)
             self.assertEqual(os.stat(result.application_log_path).st_mode & 0o777, 0o644)

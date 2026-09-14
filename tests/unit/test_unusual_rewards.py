@@ -231,11 +231,15 @@ class UnusualRewardTests(unittest.TestCase):
         self.assertEqual(tuple(outcome.item_id for outcome in triggered), (112, 113))
         self.assertEqual(result.state.effects[-1].item_id, 21)
         self.assertEqual(result.state.effects[-1].expires_at_ns, 2 + 3_600_000_000_000)
+        self.assertEqual(result.state.effects[-1].magnitude, 2 + 600_000_000_000)
         self.assertEqual(result.state.scheduled_actions[0].item_id, 23)
         self.assertEqual(
             result.state.scheduled_actions[0].due_at_ns,
             2 + 600_000_000_000,
         )
+        next_flight = start_flight(result.state, 3, lifetime_ns=100)
+        self.assertFalse(any(effect.item_id == 21 for effect in next_flight.state.effects))
+        self.assertEqual(next_flight.state.flight.expires_at_ns, 20_000_000_103)
 
     def test_reward_acquired_on_a_kill_starts_with_the_next_kill(self) -> None:
         state = start_flight(GameState(), 0, lifetime_ns=100).state

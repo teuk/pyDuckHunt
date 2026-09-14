@@ -603,7 +603,8 @@ class PartylineRuntimeTests(unittest.TestCase):
         )
         self.assertIn("déposes un morceau de pain".encode(), self.wires[-1][0])
         self.assertTrue(all(wire.startswith(b"NOTICE ChangedNick :") for wire in self.wires[-1]))
-        self.assertIn(b"prochain envol quotidien ne change pas", self.wires[-1][0])
+        self.assertIn(b"Attraction pr", self.wires[-1][0])
+        self.assertIn(b"planning quotidien reste", self.wires[-1][0])
 
         appeau = parse_irc_line(
             "@account=Operator :AnotherNick!elsewhere@changed PRIVMSG #marsh :!appeau"
@@ -662,7 +663,7 @@ class PartylineRuntimeTests(unittest.TestCase):
         self.runtime.persistence.flush(2)
         self.assertEqual(self.journal.read_records(), ())
 
-    def test_hourly_owner_bread_is_private_and_delays_without_consumption(self) -> None:
+    def test_owner_bread_is_private_consumed_and_delays_one_flight(self) -> None:
         from pyduckhunt.persistence.event import ReplayEvent
         self.runtime.dispatch(ReplayEvent.enable_hourly_bread(self.runtime.state.now_ns), lambda t: ())
         dcc = self._bootstrap_over_offered_dcc("hourly owner bread password")
@@ -673,14 +674,16 @@ class PartylineRuntimeTests(unittest.TestCase):
         replies = tuple(wire for batch in self.wires[before:] for wire in batch)
         self.assertTrue(replies)
         self.assertTrue(all(wire.startswith(b"NOTICE ChangedNick :") for wire in replies))
-        self.assertIn(b"Actif 1h", b" ".join(replies))
-        self.assertIn("conservé".encode(), b" ".join(replies))
+        self.assertIn(b"Attraction pr", b" ".join(replies))
+        self.assertIn("consommera un morceau".encode(), b" ".join(replies))
         self.runtime.dispatch(ReplayEvent.start_flight(21, 300_000_000_000), lambda t: ())
         self.assertEqual(self.runtime.state.flight.expires_at_ns, 21 + 320_000_000_000)
-        self.assertTrue(any(e.item_id == 21 for e in self.runtime.state.effects))
+        self.assertFalse(any(e.item_id == 21 for e in self.runtime.state.effects))
         dcc.sendall(b".duckplanning\n")
         self._poll_twice(22)
-        self.assertIn("pain conservé".encode(), drain(dcc))
+        planning = drain(dcc)
+        self.assertIn(b"Pains=0", planning)
+        self.assertNotIn("pain conservé".encode(), planning)
 
     def test_duckplanning_is_owner_private_complete_and_partyline_live(self) -> None:
         dcc = self._bootstrap_over_offered_dcc("owner duckplanning password")

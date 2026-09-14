@@ -33,7 +33,7 @@ from pyduckhunt.game.runtime import (
 )
 
 
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 SUPPORTED_SCHEMA_VERSIONS = (
     11,
     12,
@@ -47,6 +47,7 @@ SUPPORTED_SCHEMA_VERSIONS = (
     20,
     21,
     22,
+    23,
     SCHEMA_VERSION,
 )
 DAY_NS = 86_400_000_000_000
@@ -222,6 +223,7 @@ def encode_game_state(state: GameState) -> dict[str, object]:
         for window in state.throttle_windows
     ]
     return {
+        "bread_policy_version": state.bread_policy_version,
         **({} if state.bread_plan_effect_ids is None else
            {"bread_plan_effect_ids": list(state.bread_plan_effect_ids)}),
         "curses": curses,
@@ -261,6 +263,16 @@ def _decode_game_state(raw: object, schema_version: int) -> GameState:
         state_fields.add("last_flight")
     if schema_version >= 19:
         state_fields.add("last_shooter_key")
+    bread_policy_version = 1
+    if schema_version >= 24:
+        state_fields.add("bread_policy_version")
+        bread_policy_version = _integer(
+            payload.get("bread_policy_version"),
+            "state.bread_policy_version",
+            minimum=1,
+        )
+        if bread_policy_version not in (1, 2):
+            raise CodecError("state.bread_policy_version is unsupported")
     bread_ids = None
     if schema_version >= 22 and "bread_plan_effect_ids" in payload:
         raw_ids = payload["bread_plan_effect_ids"]
@@ -784,7 +796,10 @@ def _decode_game_state(raw: object, schema_version: int) -> GameState:
             ),
         )
         try:
-            validate_daily_schedule_state(daily_schedule, allow_bread=bread_ids is not None)
+            validate_daily_schedule_state(
+                daily_schedule,
+                allow_bread=bread_policy_version == 1 and bread_ids is not None,
+            )
         except ValueError as error:
             raise CodecError("state.daily_schedule violates runtime policy") from error
 
@@ -853,6 +868,7 @@ def _decode_game_state(raw: object, schema_version: int) -> GameState:
         daily_schedule=daily_schedule,
         throttle_windows=tuple(throttle_windows),
         bread_plan_effect_ids=bread_ids,
+        bread_policy_version=bread_policy_version,
     )
 
 

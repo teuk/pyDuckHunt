@@ -63,9 +63,10 @@ preflight and exact target confirmation. It adds no daemon, service file or
 automatic invocation. Automated coverage uses injected clocks and a local
 `socketpair()` only.
 
-Hourly bread enables expiry wake-ups, immutable plan fingerprints and recorded
-redraws. The scheduler completes already-due slots/actions before drawing a new
-plan, so bread cannot erase a due flight or a paid call. Scheduling debug prints
-`SCHEDULE event=bread-replanned` with base, bread count, plan size and next time;
-`BREAD event=flight-delay` identifies the actual per-flight extension. Private
-partyline planning refreshes when effects or concrete plan deadlines change.
+Bread carries its own durable attraction deadline and never changes the 24-slot
+daily plan. A due call has priority; otherwise a due attraction launches one
+flight when the channel is free. The first successful takeoff consumes one piece,
+so a prior daily/called/mechanical flight cancels that piece's pending attraction
+and receives its 20-second extension. `BREAD event=flight-delay` records one
+effective piece and its extension. Private partyline planning refreshes when
+effects, actions or concrete plan deadlines change.

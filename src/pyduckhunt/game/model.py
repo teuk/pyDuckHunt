@@ -542,11 +542,14 @@ class GameState:
     curses: tuple[ActiveCurse, ...] = ()
     daily_schedule: DailySchedule | None = None
     throttle_windows: tuple[ThrottleWindow, ...] = ()
-    # None: historical consumption rule. Tuple: hourly bread rule enabled;
-    # identifiers describe the bread used to draw the current plan.
+    # Legacy policy 1 uses this optional fingerprint for hourly bread replans.
+    # Policy 2 retains the field only so upgraded snapshots stay replayable.
     bread_plan_effect_ids: tuple[int, ...] | None = None
+    bread_policy_version: int = 2
 
     def __post_init__(self) -> None:
+        if type(self.bread_policy_version) is not int or self.bread_policy_version not in (1, 2):
+            raise ValueError("bread policy version is unsupported")
         if self.bread_plan_effect_ids is not None:
             ids = self.bread_plan_effect_ids
             if (type(ids) is not tuple or any(type(i) is not int or i < 1 for i in ids)
@@ -597,6 +600,13 @@ class GameState:
             for effect in self.effects
         ):
             raise ValueError("player effect owner is absent from game state")
+        if self.bread_policy_version >= 2 and any(
+            effect.item_id == 21
+            and effect.key == "channel_bread"
+            and type(effect.magnitude) is not int
+            for effect in self.effects
+        ):
+            raise ValueError("one-shot channel bread requires an attraction deadline")
         if any(
             effect.source_key is not None and effect.source_key not in set(keys)
             for effect in self.effects
@@ -607,8 +617,17 @@ class GameState:
             raise ValueError("scheduled actions must be unique and sorted by identifier")
         if self.scheduled_actions and self.next_action_id <= self.scheduled_actions[-1].action_id:
             raise ValueError("action sequence does not advance beyond scheduled actions")
-        if any(action.due_at_ns <= self.now_ns for action in self.scheduled_actions
-               if self.bread_plan_effect_ids is None or action.item_id not in (20, 23)):
+        if any(
+            action.due_at_ns <= self.now_ns
+            for action in self.scheduled_actions
+            if (
+                action.item_id not in (20, 23)
+                or (
+                    self.bread_policy_version == 1
+                    and self.bread_plan_effect_ids is None
+                )
+            )
+        ):
             raise ValueError("scheduled action has already reached its deadline")
         if any(
             action.source_key is not None and action.source_key not in set(keys)
@@ -667,6 +686,7 @@ class GameState:
             daily_schedule=self.daily_schedule,
             throttle_windows=self.throttle_windows,
             bread_plan_effect_ids=self.bread_plan_effect_ids,
+            bread_policy_version=self.bread_policy_version,
         )
 
 

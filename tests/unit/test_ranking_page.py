@@ -192,6 +192,7 @@ class RankingPageTests(unittest.TestCase):
                     source_key=None,
                     activated_at_ns=1,
                     expires_at_ns=3_601_000_000_000,
+                    magnitude=600_000_000_001,
                 ),
             ),
             next_curse_id=2,

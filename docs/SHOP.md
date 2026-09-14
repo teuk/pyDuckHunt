@@ -27,7 +27,7 @@ surface now has explicit nominal prices and deterministic boundaries.
 | 18 | `life_insurance` | 8 | effect | player | 1 use or 7 days |
 | 19 | `liability_insurance` | 5 | effect | player | 2 days |
 | 20 | `duck_call` | 8 | scheduled action | channel | injected within 10 minutes |
-| 21 | `channel_bread` | 4 | effect | channel | 1 hour per stack; retained at takeoff; +20s per piece |
+| 21 | `channel_bread` | 4 | effect | channel | at most 1 hour; one attraction; consumed at first takeoff; +20s |
 | 22 | `duck_detector` | 4 | effect | player | next successful flight |
 | 23 | `mechanical_duck` | 20 | scheduled action | channel | exactly 10 minutes |
 | 24 | `espresso` | 5 | fatigue relief | player | up to 5 settled points |
@@ -76,11 +76,11 @@ An unaffordable lucky-charm reroll leaves the existing charm unchanged.
 
 The duck call records an injected deadline within ten minutes. The mechanical
 duck records an exact ten-minute deadline. A waiting detector is consumed only
-when a new flight actually starts. Live bread instead remains active for its
-whole one-hour lifetime and adds 20 seconds per piece to new flight lifetimes.
-Adding or expiring bread redraws the 24 + active-bread plan, with the next time
-preserved on addition and on partial expiry. New bread is limited to 20 pieces.
-See `docs/CHANNEL_ACTIONS.md`.
+when a new flight actually starts. Each bread piece records one injected
+attraction deadline within its one-hour lifetime. The first later takeoff consumes
+one piece and gives that duck 20 extra seconds; its attraction is then satisfied.
+The daily plan stays at 24 slots and new bread is limited to 20 pieces. See
+`docs/CHANNEL_ACTIONS.md`.
 
 Successful duck-call and bread purchases each add 2.00 to the buyer's temporary
 karma modifier. Successful glare, sand, water and sabotage purchases subtract

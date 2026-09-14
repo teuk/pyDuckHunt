@@ -181,7 +181,7 @@ class RuntimeSchedulingAdapterTests(unittest.TestCase):
         self.assertTrue(any(b"s'\xc3\xa9chappe" in wire for wire in self.output[-1]))
         self.assertTrue(any(dispatch.transition is not None for dispatch in expired.dispatches))
 
-    def test_duck_call_wakes_at_its_deadline_and_preserves_hourly_bread(self) -> None:
+    def test_duck_call_wakes_at_its_deadline_and_consumes_one_bread(self) -> None:
         deadlines = tuple(3_600_000_000_000 + index * 60_000_000_000 for index in range(24))
         self.runtime.dispatch(
             ReplayEvent.install_daily_schedule(0, 0, deadlines),
@@ -202,10 +202,11 @@ class RuntimeSchedulingAdapterTests(unittest.TestCase):
 
         self.assertEqual(len(launched.dispatches), 1)
         self.assertEqual(self.runtime.state.scheduled_actions, ())
-        self.assertEqual(len(self.runtime.state.effects), 1)
+        self.assertEqual(self.runtime.state.effects, ())
         assert self.runtime.state.flight is not None
         self.assertEqual(self.runtime.state.flight.spawned_at_ns, 200)
         self.assertEqual(self.runtime.state.flight.kind, FlightKind.STANDARD)
+        self.assertEqual(self.runtime.state.flight.expires_at_ns, 320_000_000_200)
         self.assertTrue(any(b"PRIVMSG #pond :" in wire for wire in self.output[-1]))
 
     def test_due_duck_call_waits_for_an_active_flight_then_launches(self) -> None:
@@ -296,7 +297,7 @@ class RuntimeSchedulingAdapterTests(unittest.TestCase):
     def test_install_then_bounded_late_poll_uses_exact_deadline(self) -> None:
         adapter, _ = self.adapter()
         installed = adapter.step(0)
-        self.assertEqual(len(installed.dispatches), 2)
+        self.assertEqual(len(installed.dispatches), 1)
 
         schedule = self.runtime.state.daily_schedule
         assert schedule is not None

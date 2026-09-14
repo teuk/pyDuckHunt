@@ -53,9 +53,9 @@ The installer preserves existing configuration and refuses a conflicting languag
 Command names stay the same in both languages. Exact flight planning is private
 to authenticated Owners; ordinary players cannot request it.
 
-The game includes 24 daily base flights, bread and duck calls, special ducks,
-equipment, fatigue and persistent progression. See [shop rules](docs/SHOP.md)
-and [channel items](docs/CHANNEL_ACTIONS.md) for the details.
+The game includes 24 daily base flights, one-shot bread attractions, duck calls,
+special ducks, equipment, fatigue and persistent progression. See
+[shop rules](docs/SHOP.md) and [channel items](docs/CHANNEL_ACTIONS.md) for details.
 
 ## Documentation
 

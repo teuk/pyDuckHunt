@@ -17,6 +17,7 @@ EN = {
     ' (vie : {0})': ' (life: {0})',
     ' (également #{0})': ' (also #{0})',
     ' ; +{0}s aux nouveaux vols': ' ; +{0}s for new flights',
+    ' ; un morceau par envol, +20s pour ce canard': ' ; one piece per flight, +20s for that duck',
     ' ; en local : telnet localhost ': ' ; locally: telnet localhost ',
     " [bon d'achat]": ' [voucher]',
     ' [coupon promo.]': ' [discount coupon]',
@@ -39,7 +40,7 @@ EN = {
     '+{0} pts précision': '+{0} accuracy pts',
     '.dccstat                        IP, ports, offres et sessions DCC': '.dccstat                        IP, ports, offers and DCC sessions',
     '.duck [#canal]                 lance un canard sans déplacer le planning': '.duck [#channel]                launch a duck without moving the schedule',
-    '.duckplanning                   les 24 horaires, pains, appeaux et réveil effectif': '.duckplanning                   all 24 times, bread, calls and effective wake-up',
+    '.duckplanning                   les 24 horaires, attractions et appeaux': '.duckplanning                   all 24 times, attractions and calls',
     '.fields                         champs acceptés par .setplayer': '.fields                         fields accepted by .setplayer',
     '.game                           vol, planning et état DuckHunt': '.game                           flight, schedule and DuckHunt state',
     '.giveammo <nick> [n]            donne 1 à 100 munitions, sans dépasser la capacité': '.giveammo <nick> [n]             give 1 to 100 bullets, within capacity',
@@ -261,6 +262,7 @@ EN = {
         'retardé de {0}s.'
     ): 'Active for 1h and kept through every flight. Stronger attraction; new ducks stay {0}s longer.',
     'Action #{0}: {1}, auteur={2}, échéance={3}.': 'Action #{0}: {1}, by={2}, due={3}.',
+    'Attractions des pains: {0}.': 'Bread attractions: {0}.',
     'Activity misses={0} wild={1} empty={2} fatigue={3:.2f}% carried={4} credit={5}': 'Activity misses={0} wild={1} empty={2} fatigue={3:.2f}% carried={4} credit={5}',
     'Arme': 'Weapon',
     'Arme enrayée': 'Jammed gun',
@@ -387,7 +389,7 @@ EN = {
         'Pendant 48h, il y a 1 chance sur 2 pour que les munitions utilisées soient recyclées et '
         "que tes tirs n'en consomment pas."
     ): 'For 48h, each shot has a 1 in 2 chance of recycling its ammo and consuming no bullet.',
-    'Prochain quotidien={0} | réveil effectif={1} | vol={2}.': 'Next daily={0} | effective wake-up={1} | flight={2}.',
+    'Prochain quotidien={0} | prochain événement={1} | vol={2}.': 'Next daily={0} | next event={1} | flight={2}.',
     'Précision': 'Accuracy',
     'QUECK': 'QUECK',
     'Recharg.': 'Reloads',
@@ -593,6 +595,7 @@ EN = {
     "on m'a parlé d'un troupeau de touristes avec des pétoires, c'est ici ?": 'I heard about a flock of tourists with guns, is this the place?',
     'oui': 'yes',
     'pain conservé à chaque envol ; +{0}s aux nouveaux vols.': 'bread kept through every flight; +{0}s for new flights.',
+    'le prochain envol consomme un morceau et reste 20s de plus.': 'the next flight consumes one piece and stays 20s longer.',
     'permis de tuer': 'license to kill',
     'pistolet': 'pistol',
     'poignée de sable': 'handful of sand',
@@ -749,6 +752,15 @@ EN = {
         'next 10 minutes.{2}'
     ),
     (
+        "{0} > Tu achètes un morceau de pain en échange de {1} points d'xp. Pendant 1h au maximum, "
+        "il attire un canard ; le premier envol consomme un morceau et reste 20s de plus. "
+        'Karma temporaire : +2,00. Il y a actuellement {2} {3} de pain sur {4}.{5}'
+    ): (
+        '{0} > You buy a piece of bread for {1} xp. For at most 1h, it attracts a duck; the '
+        'first flight consumes one piece and stays 20s longer. Temporary karma: +2.00. There '
+        'are currently {2} {3} of bread on {4}.{5}'
+    ),
+    (
         "{0} > Tu achètes un morceau de pain en échange de {1} points d'xp. Il reste disponible "
         "pendant 1h ou jusqu'au prochain envol, qui en consommera un. Ton karma temporaire "
         'augmente aussi de 2,00. Il y a actuellement {2} {3} de pain sur {4}.{5}'
@@ -783,6 +795,15 @@ EN = {
         'accuracy points.{3}'
     ),
     '{0} > Tu déposes un morceau de pain sur {1}. Il y a actuellement {2} {3} de pain. ': '{0} > You put bread on {1}. There are currently {2} {3} of bread. ',
+    (
+        '{0} > Tu déposes un morceau de pain sur {1}. Il y a actuellement {2} {3} de pain. '
+        'Attraction prévue : {4}. Le premier envol consommera un morceau et restera 20s de plus ; '
+        'expiration au bout de 1h. Le planning quotidien reste à 24 créneaux.'
+    ): (
+        '{0} > You put bread on {1}. There are currently {2} {3} of bread. Attraction scheduled: '
+        '{4}. The first flight consumes one piece and stays 20s longer; it expires after 1h. '
+        'The daily schedule remains at 24 slots.'
+    ),
     '{0} > Tu es à court de chargeurs.': '{0} > You are out of spare magazines.',
     "{0} > Tu n'es pas assez riche pour cet achat.": '{0} > You cannot afford this purchase.',
     '{0} > Tu ne peux pas chasser pour le moment.': '{0} > You cannot hunt right now.',

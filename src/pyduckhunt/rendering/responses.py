@@ -733,7 +733,13 @@ def render_inventory(
                        if effect.expires_at_ns is not None]
         expiry = ("" if not expirations else
                   tr(' (première expiration dans {0})', format_duration_ns(min(expirations) - state.now_ns)))
-        effect_hint = (tr(' ; +{0}s aux nouveaux vols', 20 * bread_count) if state.bread_plan_effect_ids is not None else "")
+        effect_hint = (
+            tr(' ; un morceau par envol, +20s pour ce canard')
+            if state.bread_policy_version >= 2
+            else tr(' ; +{0}s aux nouveaux vols', 20 * bread_count)
+            if state.bread_plan_effect_ids is not None
+            else ""
+        )
         inventory_parts.append(
             tr('{0} {1} de pain sur {2}{3}{4}', bread_count, bread_label, channel_label, expiry, effect_hint)
         )
@@ -1119,6 +1125,14 @@ def render_outcome(
                 raise ValueError("bread purchase count is invalid")
             bread = tr('morceau') if count == 1 else tr('morceaux')
             channel_label = tr('le canal') if channel is None else channel
+            if outcome.due_at_ns is not None:
+                return (
+                    tr((
+                        "{0} > Tu achètes un morceau de pain en échange de {1} points d'xp. Pendant 1h au maximum, "
+                        "il attire un canard ; le premier envol consomme un morceau et reste 20s de plus. "
+                        'Karma temporaire : +2,00. Il y a actuellement {2} {3} de pain sur {4}.{5}'
+                    ), actor, outcome.charged_experience, count, bread, channel_label, tags),
+                )
             if outcome.effect_magnitude == 20:
                 return (
                     tr((

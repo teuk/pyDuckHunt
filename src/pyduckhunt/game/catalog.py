@@ -156,8 +156,12 @@ class ShopItem:
             raise ValueError("effect uses must be positive")
         if self.duration_ns is None and self.uses is None:
             raise ValueError("effect item must be time-bounded or use-bounded")
-        if schedule_pair[0] is not None:
-            raise ValueError("effect item cannot define a scheduled action window")
+        if schedule_pair[0] is not None and not (
+            self.item_id == 21
+            and self.grant_kind is GrantKind.EFFECT
+            and self.scope is EffectScope.CHANNEL
+        ):
+            raise ValueError("only channel bread can define an effect deadline window")
         magnitude_pair = (self.magnitude_min, self.magnitude_max)
         if (magnitude_pair[0] is None) != (magnitude_pair[1] is None):
             raise ValueError("effect magnitude range must have two bounds")
@@ -323,6 +327,8 @@ SHOP_CATALOG = (
         scope=EffectScope.CHANNEL,
         duration_ns=HOUR_NS,
         duplicate_policy=DuplicatePolicy.STACK,
+        schedule_min_ns=1,
+        schedule_max_ns=HOUR_NS - 1,
     ),
     ShopItem(22, "duck_detector", 4, GrantKind.EFFECT, uses=1),
     ShopItem(
@@ -435,6 +441,13 @@ def validate_active_effect(effect: ActiveEffect) -> None:
             or effect.magnitude > item.magnitude_max
         ):
             raise ValueError("active effect magnitude differs from catalog")
+    elif effect.item_id == 21:
+        if effect.magnitude is not None and (
+            effect.magnitude <= effect.activated_at_ns
+            or effect.expires_at_ns is None
+            or effect.magnitude >= effect.expires_at_ns
+        ):
+            raise ValueError("bread attraction deadline differs from catalog")
     elif effect.item_id == 28:
         if (
             type(effect.magnitude) is not int

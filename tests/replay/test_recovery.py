@@ -72,6 +72,7 @@ class RecoveryReplayTests(unittest.TestCase):
         self.snapshots.write(snapshot_from_result(result))
         raw = json.loads(self.snapshots.path.read_text(encoding="utf-8"))
         raw["schema"] = 13
+        del raw["state"]["bread_policy_version"]
         del raw["state"]["last_flight"]
         del raw["state"]["last_shooter_key"]
         del raw["state"]["players"][0]["permanently_confiscated"]
@@ -108,6 +109,7 @@ class RecoveryReplayTests(unittest.TestCase):
         self.snapshots.write(snapshot_from_result(result))
         raw = json.loads(self.snapshots.path.read_text(encoding="utf-8"))
         raw["schema"] = 14
+        del raw["state"]["bread_policy_version"]
         del raw["state"]["last_flight"]
         del raw["state"]["last_shooter_key"]
         del raw["state"]["players"][0]["permanently_confiscated"]
@@ -152,6 +154,7 @@ class RecoveryReplayTests(unittest.TestCase):
         self.snapshots.write(snapshot_from_result(result))
         raw = json.loads(self.snapshots.path.read_text(encoding="utf-8"))
         raw["schema"] = 11
+        del raw["state"]["bread_policy_version"]
         del raw["state"]["last_flight"]
         del raw["state"]["last_shooter_key"]
         del raw["state"]["players"][0]["permanently_confiscated"]
@@ -196,6 +199,7 @@ class RecoveryReplayTests(unittest.TestCase):
         self.snapshots.write(snapshot_from_result(result))
         raw = json.loads(self.snapshots.path.read_text(encoding="utf-8"))
         raw["schema"] = 19
+        del raw["state"]["bread_policy_version"]
         for field in ("experience_spent", "jams", "shots_fired"):
             del raw["state"]["players"][0][field]
         body = {

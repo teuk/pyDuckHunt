@@ -242,6 +242,16 @@ def purchase(
             <= now_ns + item.schedule_max_ns
         ):
             raise ValueError("scheduled action deadline is outside its calibrated window")
+    elif item.item_id == 21 and current.bread_policy_version >= 2:
+        assert item.schedule_min_ns is not None and item.schedule_max_ns is not None
+        if scheduled_for_ns is None:
+            scheduled_for_ns = now_ns + item.schedule_max_ns
+        if type(scheduled_for_ns) is not int or not (
+            now_ns + item.schedule_min_ns
+            <= scheduled_for_ns
+            <= now_ns + item.schedule_max_ns
+        ):
+            raise ValueError("bread attraction deadline is outside its active hour")
     elif scheduled_for_ns is not None:
         raise ValueError("this shop item does not accept a scheduled deadline")
 
@@ -361,8 +371,7 @@ def purchase(
             )
         )
         return Transition(current, tuple(outcomes))
-    if (item_id == 21 and current.bread_plan_effect_ids is not None
-            and len(active_channel_breads(current, now_ns)) >= MAX_CHANNEL_BREAD):
+    if item_id == 21 and len(active_channel_breads(current, now_ns)) >= MAX_CHANNEL_BREAD:
         return Transition(current, tuple(outcomes) + (Outcome(
             OutcomeKind.SHOP_NOT_APPLICABLE, actor=nickname, item_id=21, player=player),))
     shop_credit_spent = min(player.shop_credit, cost)
@@ -497,7 +506,11 @@ def purchase(
         if effect_blocked:
             effect = None
         else:
-            effect_magnitude = magnitude
+            effect_magnitude = (
+                scheduled_for_ns
+                if item.item_id == 21 and current.bread_policy_version >= 2
+                else magnitude
+            )
             if item.item_id == 28:
                 assert target is not None
                 fatigue_changed_centi = min(
@@ -602,7 +615,9 @@ def purchase(
             discount_percent=discount_percent,
             levels_lost=debit.levels_lost,
             effect_id=effect_id,
-            effect_magnitude=(20 if item_id == 21 and current.bread_plan_effect_ids is not None
+            effect_magnitude=(20 if item_id == 21 and (
+                              current.bread_policy_version >= 2
+                              or current.bread_plan_effect_ids is not None)
                               else settled_effect_magnitude),
             player=player,
             target=target_nickname,

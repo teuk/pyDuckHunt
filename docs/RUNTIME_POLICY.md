@@ -81,8 +81,9 @@ pilot round may set the frequency without changing acquisition or replay.
 
 ## Bread attraction
 
-With the hourly bread rule active, the current plan contains 24 plus the active
-bread count (maximum 20). Adding or expiring bread redraws it using reference
-method 2, preserving the next future time on addition and partial expiry. The
-last expiry redraws 24 slots. A current plan's elapsed slots are not a history
-of actual kills or launches. See `CHANNEL_ACTIONS.md` for precise semantics.
+The daily plan always contains 24 slots. Every new bread piece has one separate
+attraction deadline inside its one-hour lifetime. The first takeoff after the
+piece appears consumes the oldest bread and extends that duck by 20 seconds;
+if the attraction itself becomes due first, it requests that takeoff. At most
+20 pieces may be active. A current plan's elapsed slots are scheduling progress,
+not a history of actual kills or launches. See `CHANNEL_ACTIONS.md` for details.

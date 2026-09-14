@@ -197,7 +197,9 @@ class CalibratedEventResolver:
             elif item.requires_magnitude:
                 assert item.magnitude_min is not None and item.magnitude_max is not None
                 magnitude = self._draw(item.magnitude_min, item.magnitude_max)
-            if item.grant_kind is GrantKind.CHANNEL_ACTION:
+            if item.grant_kind is GrantKind.CHANNEL_ACTION or (
+                item.item_id == 21 and state.bread_policy_version >= 2
+            ):
                 assert item.schedule_min_ns is not None
                 assert item.schedule_max_ns is not None
                 scheduled_for_ns = self._draw(
