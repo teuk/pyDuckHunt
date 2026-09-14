@@ -1,5 +1,7 @@
 # pyDuckHunt
 
+> Developed with substantial help from large language models (LLMs). Apparently, that makes me a “lamer”. To be clear, I don’t consider anyone a “lamer” for building their projects the same way I do.
+
 [![CI](https://github.com/teuk/pyDuckHunt/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/teuk/pyDuckHunt/actions/workflows/ci.yml)
 [![Status: Beta](https://img.shields.io/badge/Status-Beta-f0a500.svg)](#beta-status)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
