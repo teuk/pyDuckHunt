@@ -135,7 +135,7 @@ class IncidentEngineTests(unittest.TestCase):
             shot_attempt=miss_with(incident, miss_penalty=2),
         )
         shooter = result.state.player("hunter")
-        self.assertEqual(shooter.experience, 23)
+        self.assertEqual(shooter.experience, 28)
         self.assertFalse(shooter.confiscated)
         self.assertTrue(result.outcomes[-1].safe_conduct_applied)
         self.assertEqual(result.outcomes[-1].incident_penalty, 0)
@@ -199,7 +199,7 @@ class IncidentEngineTests(unittest.TestCase):
         )
         self.assertEqual(result.outcomes[-1].kind, OutcomeKind.INCIDENT_ABSORBED)
         self.assertEqual(result.outcomes[-1].insurance_award, 21)
-        self.assertEqual(result.state.player("victim").experience, 53)
+        self.assertEqual(result.state.player("victim").experience, 56)
         self.assertFalse(any(effect.item_id == 18 for effect in result.state.effects))
 
     def test_miss_penalty_can_cross_a_level_boundary(self) -> None:

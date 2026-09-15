@@ -73,7 +73,7 @@ class BreadRuleTests(unittest.TestCase):
             [outcome.effect_id for outcome in again.outcomes if outcome.kind is OutcomeKind.EFFECT_CONSUMED],
             [2],
         )
-        self.assertIn('mange un morceau', ' '.join(render_outcomes(started.outcomes)))
+        self.assertNotIn('mange un morceau', ' '.join(render_outcomes(started.outcomes)))
 
     def test_expired_piece_is_not_consumed_and_boundary_has_no_bonus(self):
         first = purchase(funded(), 'Hunter', 21, SECOND, scheduled_for_ns=100 * SECOND)
@@ -151,15 +151,15 @@ class BreadRuleTests(unittest.TestCase):
         self.assertEqual(flight_outcome.channel_effect_count, 2)
         self.assertEqual(flight_outcome.effect_magnitude, 40)
 
-    def test_player_notice_inventory_and_planning_explain_the_same_rule(self):
+    def test_player_notice_is_compact_while_private_views_explain_the_rule(self):
         bought = purchase(
             funded(), 'Hunter', 21, SECOND, scheduled_for_ns=10 * MINUTE,
         )
         text = ' '.join(render_outcomes(bought.outcomes, channel='#marsh'))
         self.assertIn('4 points', text)
-        self.assertIn('Pendant 1h au maximum', text)
-        self.assertIn('il attire un canard', text)
-        self.assertIn('premier envol consomme un morceau', text)
+        self.assertIn("chances d'attirer des canards pendant 1h", text)
+        self.assertIn('retardant leur départ', text)
+        self.assertNotIn('consomme un morceau', text)
         inventory = ' '.join(render_inventory(bought.state, 'Hunter'))
         self.assertIn('un morceau par envol, +20s pour ce canard', inventory)
         self.assertIn('première expiration', inventory)

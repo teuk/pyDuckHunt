@@ -56,8 +56,8 @@ class TclShotFeedbackTests(unittest.TestCase):
                     self.assertEqual(state.effects, effects)
                     text = ' '.join(render_outcomes(result.outcomes, channel='#pond'))
                     self.assertIn('Raté.', text)
-                    self.assertNotIn('*BANG*', text)
-                    self.assertNotIn('*BOUM*', text)
+                    expected_sound = '*BOUM*' if item == 4 else '*BANG*'
+                    self.assertIn(expected_sound, text)
                     if count < 3:
                         self.assertEqual(state.flight.noisy_misses, count)
                     else:

@@ -241,7 +241,7 @@ SHOP_CATALOG = (
     ShopItem(
         8,
         "infrared_lock",
-        15,
+        8,
         GrantKind.EFFECT,
         duration_ns=24 * HOUR_NS,
         uses=6,
@@ -298,7 +298,7 @@ SHOP_CATALOG = (
     ShopItem(
         18,
         "life_insurance",
-        8,
+        5,
         GrantKind.EFFECT,
         duration_ns=7 * 24 * HOUR_NS,
         uses=1,
@@ -334,7 +334,7 @@ SHOP_CATALOG = (
     ShopItem(
         23,
         "mechanical_duck",
-        20,
+        10,
         GrantKind.CHANNEL_ACTION,
         scope=EffectScope.CHANNEL,
         schedule_min_ns=10 * MINUTE_NS,
@@ -350,7 +350,7 @@ SHOP_CATALOG = (
     ShopItem(
         25,
         "coffee_thermos",
-        10,
+        15,
         GrantKind.FATIGUE_RELIEF,
         fatigue_relief_max=10,
     ),
@@ -379,11 +379,11 @@ SHOP_CATALOG = (
         duration_ns=HOUR_NS,
         target_presence_required=True,
     ),
-    ShopItem(29, "safe_conduct", 15, GrantKind.EFFECT, duration_ns=24 * HOUR_NS),
+    ShopItem(29, "safe_conduct", 10, GrantKind.EFFECT, duration_ns=24 * HOUR_NS),
     ShopItem(
         30,
         "automatic_reloader",
-        20,
+        10,
         GrantKind.EFFECT,
         duration_ns=24 * HOUR_NS,
     ),

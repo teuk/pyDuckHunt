@@ -152,7 +152,7 @@ class BilingualTests(unittest.TestCase):
             self.assertNotIn('1726000000',text)
             self.assertNotIn('UTC',text)
             self.assertNotIn('CEST',text)
-        self.assertIn('stays in place',render_outcome(Outcome(OutcomeKind.SHOP_PURCHASED,
+        self.assertIn('delaying their departure',render_outcome(Outcome(OutcomeKind.SHOP_PURCHASED,
             actor='Hunter',player=self.player,item_id=21,channel_effect_count=2,effect_magnitude=20),language='en')[0])
 
     def test_ranking_page_and_background_publisher_use_instance_language(self):

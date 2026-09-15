@@ -278,6 +278,21 @@ class RuntimeSettlementTests(unittest.TestCase):
         self.assertEqual(thermos.fatigue_target_centi, -300)
         self.assertEqual(thermos_entropy.calls, [])
 
+    def test_corrected_shop_prices_are_settled_from_the_reference_catalog(self) -> None:
+        expected = {8: 8, 18: 5, 23: 10, 25: 15, 29: 10, 30: 10}
+        for item_id, cost in expected.items():
+            with self.subTest(item_id=item_id):
+                entropy = (
+                    SequenceSource(600_000_000_001)
+                    if item_id == 23
+                    else SequenceSource()
+                )
+                event = CalibratedEventResolver(
+                    entropy,
+                    lambda channel, nickname: True,
+                )(GameState(), context(CommandKind.SHOP, "shop", str(item_id)))
+                self.assertEqual(event.charged_cost, cost)
+
     def test_target_presence_and_fatigue_are_settled_from_injected_state(self) -> None:
         state = GameState(
             players=(

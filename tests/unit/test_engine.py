@@ -5,6 +5,7 @@ import unittest
 from pyduckhunt.game.commands import Command, CommandKind
 from pyduckhunt.game.engine import advance_time, apply_command, start_flight
 from pyduckhunt.game.model import (
+    FlightKind,
     GameState,
     LastFlightConclusion,
     OutcomeKind,
@@ -37,6 +38,7 @@ class DeterministicEngineTests(unittest.TestCase):
         expired = advance_time(started.state, 6 * SECOND)
         self.assertIsNone(expired.state.flight)
         self.assertEqual(expired.outcomes[-1].kind, OutcomeKind.FLIGHT_EXPIRED)
+        self.assertEqual(expired.outcomes[-1].flight_kind, FlightKind.STANDARD)
         assert expired.state.last_flight is not None
         self.assertEqual(expired.state.last_flight.ended_at_ns, 6 * SECOND)
         self.assertEqual(expired.state.last_flight.conclusion, LastFlightConclusion.ESCAPED)

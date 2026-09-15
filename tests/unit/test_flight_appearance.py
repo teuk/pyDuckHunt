@@ -144,8 +144,8 @@ class FlightAppearanceTests(unittest.TestCase):
             )
         )[0]
         self.assertNotIn("CANARD DORÉ", miss)
-        self.assertIn("CANARD DORÉ", survived)
-        self.assertIn("CANARD DORÉ", killed)
+        self.assertIn("super-canard", survived)
+        self.assertIn("super-canard", killed)
 
 
 if __name__ == "__main__":

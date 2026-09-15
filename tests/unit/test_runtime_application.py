@@ -238,9 +238,9 @@ class IRCGameBridgeTests(unittest.TestCase):
         assert self.runtime.state.flight is not None
         self.assertEqual(self.runtime.state.flight.spawned_at_ns, 200)
         self.assertEqual(self.runtime.state.flight.expires_at_ns, 200 + 320_000_000_000)
-        self.assertIn(b"premier envol consomme un morceau", bread.priority_batch[0])
-        self.assertIn(
-            "Le canard mange un morceau de pain posé sur le canal.".encode(),
+        self.assertIn(b"retardant leur d\xc3\xa9part", bread.priority_batch[0])
+        self.assertNotIn(
+            "mange un morceau de pain".encode(),
             b" ".join(wire for batch in self.batches for wire in batch if wire.startswith(b"PRIVMSG #pond :")),
         )
 

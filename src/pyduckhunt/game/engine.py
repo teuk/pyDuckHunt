@@ -68,7 +68,11 @@ def _advance(state: GameState, now_ns: int) -> Transition:
             conclusion=LastFlightConclusion.ESCAPED,
         )
         outcomes.append(
-            Outcome(OutcomeKind.FLIGHT_EXPIRED, flight_id=expired.flight_id)
+            Outcome(
+                OutcomeKind.FLIGHT_EXPIRED,
+                flight_id=expired.flight_id,
+                flight_kind=expired.kind,
+            )
         )
     day_start_ns = paris_calendar_day_marker_ns(now_ns)
     players = {}
@@ -977,6 +981,7 @@ def apply_command(
                 late_by_ms=late_by_ms,
                 rounds_consumed=rounds_consumed,
                 ammunition_recycled=ammunition_recycled,
+                ammunition_item_id=ammunition_item_id,
                 fatigue_changed_centi=fatigue_changed_centi,
                 fatigue_penalty_bps=attempt.fatigue_penalty_bps,
                 overexcitation_penalty_bps=attempt.overexcitation_penalty_bps,
@@ -1012,6 +1017,7 @@ def apply_command(
                 player=player,
                 rounds_consumed=rounds_consumed,
                 ammunition_recycled=ammunition_recycled,
+                ammunition_item_id=ammunition_item_id,
                 fatigue_changed_centi=fatigue_changed_centi,
                 fatigue_penalty_bps=attempt.fatigue_penalty_bps,
                 overexcitation_penalty_bps=attempt.overexcitation_penalty_bps,
@@ -1061,6 +1067,7 @@ def apply_command(
                 player=player,
                 rounds_consumed=rounds_consumed,
                 ammunition_recycled=ammunition_recycled,
+                ammunition_item_id=ammunition_item_id,
                 fatigue_changed_centi=fatigue_changed_centi,
                 fatigue_penalty_bps=attempt.fatigue_penalty_bps,
                 overexcitation_penalty_bps=attempt.overexcitation_penalty_bps,
@@ -1211,6 +1218,7 @@ def apply_command(
             accuracy_bonus_percent=accuracy_bonus_percent,
             effective_accuracy_bps=effective_accuracy_bps,
             effective_jam_bps=effective_jam_bps,
+            effect_magnitude=None if charm is None else charm.magnitude,
             item_id=None if glare is None else glare.item_id,
             effect_id=None if glare is None else glare.effect_id,
             nuisance_source_key=None if glare is None else glare.source_key,

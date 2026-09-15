@@ -5,6 +5,7 @@ import unittest
 from pyduckhunt.game.catalog import GrantKind, SHOP_CATALOG
 from pyduckhunt.game.commands import CommandSyntaxError, parse_command
 from pyduckhunt.game.model import (
+    FlightState,
     ActiveEffect,
     EffectScope,
     GameState,
@@ -672,7 +673,7 @@ class ResponseRenderingTests(unittest.TestCase):
         )
         self.assertEqual(rendered.count("silencieux"), 1)
 
-    def test_bread_purchase_reports_cost_duration_channel_and_stack(self) -> None:
+    def test_bread_purchase_uses_the_compact_reference_confirmation(self) -> None:
         line = render_outcome(
             Outcome(
                 OutcomeKind.SHOP_PURCHASED,
@@ -684,10 +685,11 @@ class ResponseRenderingTests(unittest.TestCase):
             channel="#pond",
         )[0]
         self.assertIn("4 points d'xp", line)
-        self.assertIn("pendant 1h", line)
-        self.assertIn("prochain envol", line)
-        self.assertIn("karma temporaire", line)
+        self.assertIn("chances d'attirer des canards pendant 1h", line)
+        self.assertIn("retardant leur départ", line)
         self.assertIn("2 morceaux de pain sur #pond", line)
+        self.assertNotIn("consomme", line)
+        self.assertNotIn("karma temporaire", line)
 
     def test_duck_call_purchase_preserves_the_surprise_and_purchase_tags(self) -> None:
         line = render_outcome(
@@ -710,12 +712,12 @@ class ResponseRenderingTests(unittest.TestCase):
         self.assertNotIn("quotidien", line)
         self.assertNotRegex(line, r"\d{2}:\d{2}|\d{4}-\d{2}-\d{2}|1788867281")
 
-    def test_consumed_bread_is_visible_on_the_channel(self) -> None:
+    def test_consumed_bread_is_bookkeeping_only(self) -> None:
         self.assertEqual(
             render_outcome(
                 Outcome(OutcomeKind.EFFECT_CONSUMED, item_id=21)
             ),
-            ("Le canard mange un morceau de pain posé sur le canal.",),
+            (),
         )
 
     def test_shop_is_one_flood_safe_optional_catalog_link(self) -> None:
@@ -797,7 +799,7 @@ class ResponseRenderingTests(unittest.TestCase):
             LastFlightConclusion.ESCAPED,
         )
         line = render_last_flight(record, now_ns=361_000_000_000)[0]
-        self.assertIn("envolé sans être touché", line)
+        self.assertIn("Las d'attendre, il s'est enfui", line)
         self.assertIn("5mn00s", line)
         self.assertIn("1mn00s", line)
 
@@ -1004,6 +1006,208 @@ class ResponseRenderingTests(unittest.TestCase):
             )
         )[0]
         self.assertIn("rechargement auto", line)
+
+    def test_reference_shot_feedback_preserves_sound_tags_and_progress_order(self) -> None:
+        silent = player(
+            "Archer",
+            level=40,
+            hits=81,
+            experience=17,
+            golden_hits=4,
+        )
+        hit = render_outcome(
+            Outcome(
+                OutcomeKind.HIT,
+                actor="Archer",
+                player=silent,
+                flight_kind=FlightKind.GOLDEN,
+                elapsed_ms=1_234,
+                experience_awarded=36,
+                ammunition_recycled=True,
+            ),
+            channel="#pond",
+        )[0]
+        self.assertIn("*TCHAK*", hit)
+        self.assertNotIn("*BANG*", hit)
+        self.assertIn("81 canards (dont 4 super-canards) sur #pond", hit)
+        self.assertIn("[recyclé]", hit)
+        self.assertNotIn("munition recyclée", hit)
+        self.assertLess(hit.index("[36 xp]"), hit.index("niv. 40"))
+
+        miss = render_outcome(
+            Outcome(
+                OutcomeKind.MISS,
+                actor="Archer",
+                player=silent,
+                flight_id=1,
+                miss_penalty=2,
+            )
+        )[0]
+        self.assertIn("*TCHAK*", miss)
+        self.assertIn("[raté : -2 xp]", miss)
+
+    def test_reference_escape_feedback_distinguishes_every_flight_kind(self) -> None:
+        for kind, subject in (
+            (FlightKind.STANDARD, "Le canard"),
+            (FlightKind.GOLDEN, "Le super-canard"),
+            (FlightKind.MECHANICAL, "Le canard mécanique"),
+        ):
+            with self.subTest(kind=kind):
+                line = render_outcome(
+                    Outcome(OutcomeKind.FLIGHT_EXPIRED, flight_kind=kind)
+                )[0]
+                self.assertTrue(line.startswith(subject))
+                self.assertIn("°'`'°-.,_,.-°'`", line)
+        frightened = render_outcome(
+            Outcome(OutcomeKind.FLIGHT_FRIGHTENED)
+        )[0]
+        self.assertIn("Effrayé par tout ce bruit", frightened)
+        self.assertIn("·°'`'°-.,¸¸.·°'`", frightened)
+
+    def test_reference_weapon_state_feedback_keeps_ammunition_visible(self) -> None:
+        for kind, expected in (
+            (OutcomeKind.EMPTY, "CHARGEUR VIDE"),
+            (OutcomeKind.UNJAMMED, "Tu décoinces et recharges ton arme"),
+            (OutcomeKind.NO_RESERVE, "à court de chargeurs"),
+        ):
+            with self.subTest(kind=kind):
+                line = render_outcome(
+                    Outcome(kind, actor="Alice", player=self.alice)
+                )[0]
+                self.assertIn(expected, line)
+                self.assertIn("Mun. : 0/6", line)
+                self.assertIn("Charg. : 1/2", line)
+
+    def test_reference_loot_feedback_explains_concrete_rewards(self) -> None:
+        magazine = render_outcome(
+            Outcome(
+                OutcomeKind.LOOT_ACQUIRED,
+                actor="Alice",
+                loot_key="xp_20",
+                experience_awarded=20,
+            )
+        )[0]
+        voucher = render_outcome(
+            Outcome(
+                OutcomeKind.LOOT_ACQUIRED,
+                actor="Alice",
+                loot_key="voucher_50",
+                shop_credit_awarded=50,
+            )
+        )[0]
+        curse = render_outcome(
+            Outcome(
+                OutcomeKind.LOOT_ACQUIRED,
+                actor="Alice",
+                loot_key="curse_scroll",
+                curse_key="tremor",
+            )
+        )[0]
+        self.assertIn("magazine de chasse", magazine)
+        self.assertIn("[20 xp]", magazine)
+        self.assertIn("bon d'achat d'une valeur de 50 points d'xp", voucher)
+        self.assertIn("Malédiction du Tremblement", curse)
+        self.assertIn("réduit ta précision de 25% pendant 24h", curse)
+        self.assertNotIn("(tremor)", curse)
+
+        promoted = render_outcome(
+            Outcome(
+                OutcomeKind.LOOT_ACQUIRED,
+                actor="Alice",
+                player=player("Alice", level=10),
+                loot_key="xp_20",
+                experience_awarded=20,
+                levels_gained=1,
+            )
+        )[0]
+        self.assertIn("Tu deviens chasseur niveau 10", promoted)
+
+    def test_reference_milestones_amulets_and_mechanical_ducks_are_explicit(self) -> None:
+        milestone = render_outcome(
+            Outcome(
+                OutcomeKind.MILESTONE_CREDIT,
+                actor="Alice",
+                player=player("Alice", hits=100),
+                shop_credit_awarded=125,
+            )
+        )[0]
+        baker = render_outcome(
+            Outcome(
+                OutcomeKind.REWARD_TRIGGERED,
+                actor="Alice",
+                triggered_item_id=21,
+            ),
+            channel="#pond",
+        )[0]
+        mechanical = render_outcome(
+            Outcome(
+                OutcomeKind.HIT,
+                actor="Alice",
+                player=self.alice,
+                flight_kind=FlightKind.MECHANICAL,
+                elapsed_ms=500,
+            )
+        )[0]
+        self.assertIn("100ème canard", milestone)
+        self.assertIn("125 points d'xp", milestone)
+        self.assertIn("Amulette du Boulanger", baker)
+        self.assertIn("morceau de pain sur #pond", baker)
+        self.assertIn("canard mécanique", mechanical)
+        self.assertIn("*BZZzZzt*", mechanical)
+
+    def test_every_shop_confirmation_describes_the_purchased_item(self) -> None:
+        expected = {
+            1: "balle", 2: "chargeur", 3: "munitions AP",
+            4: "munitions explosives", 5: "confisquée", 6: "graisses",
+            7: "lunette de visée", 8: "détecteur infrarouge",
+            9: "silencieux", 10: "trèfle à quatre feuilles",
+            11: "lunettes de soleil", 12: "sécher tes vêtements",
+            13: "goupillon", 14: "miroir", 15: "sable",
+            16: "seau d'eau", 17: "sabotes", 18: "assurance-vie",
+            19: "responsabilité civile", 20: "appeau", 21: "pain",
+            22: "détecteur de canards", 23: "canard mécanique",
+            24: "expresso", 25: "thermos de café", 26: "imperméable",
+            27: "gnôle", 28: "camomille", 29: "sauf-conduit",
+            30: "rechargement automatique", 31: "purification",
+        }
+        hunter = player("Alice", level=1, fatigue_centi=-300)
+        for item_id, fragment in expected.items():
+            with self.subTest(item_id=item_id):
+                outcome = Outcome(
+                    OutcomeKind.SHOP_PURCHASED,
+                    actor="Alice",
+                    player=hunter,
+                    target="Bob",
+                    item_id=item_id,
+                    charged_experience=5,
+                    effect_magnitude=5,
+                    fatigue_changed_centi=-500 if item_id in (24, 25, 27) else 600,
+                    channel_effect_count=2,
+                    removed_curse_keys=("tremor",) if item_id == 31 else (),
+                )
+                line = render_outcome(outcome, channel="#pond")[0]
+                self.assertIn(fragment, line)
+                self.assertNotIn("Achat :", line)
+                for wire in render_wire_response("#pond", (line,)):
+                    self.assertLessEqual(len(wire), MAX_WIRE_BYTES)
+
+    def test_active_last_flight_does_not_publish_its_deadline(self) -> None:
+        active = FlightState(
+            flight_id=1,
+            kind=FlightKind.STANDARD,
+            spawned_at_ns=100_000_000_000,
+            expires_at_ns=400_000_000_000,
+            health=1,
+        )
+        line = render_last_flight(
+            None,
+            active_flight=active,
+            now_ns=160_000_000_000,
+        )[0]
+        self.assertIn("Il est toujours là", line)
+        self.assertIn("1mn00s", line)
+        self.assertNotIn("s'il n'est pas touché", line)
+        self.assertNotIn("4mn00s", line)
 
     def test_curse_delay_and_block_have_player_responses(self) -> None:
         self.assertIn(

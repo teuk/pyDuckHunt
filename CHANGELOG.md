@@ -27,6 +27,15 @@ these changes do not create a stable release or a tag.
 
 ### French and English messages
 
+- Restore the established French IRC presentation across normal, golden and
+  mechanical flights: weapon-specific shot sounds, escape trails, compact
+  ammunition state, recycled-round markers and the `super-canard` vocabulary.
+- Restore concrete loot, milestone, amulet and 31-item purchase confirmations
+  instead of generic summaries. Keep the current settled rules and bilingual
+  rendering; only their player-facing projection changes.
+- Keep bread consumption as silent bookkeeping. The purchase remains explicit,
+  but a later takeoff no longer emits an extra channel message merely to report
+  that one piece was consumed.
 - Add a complete English presentation catalogue, using the supplied Tcl 2.11
   vocabulary and covering current pyDuckHunt additions. French remains default.
 - Add optional `game.language` (`fr`/`en`) and `install.sh --language en` for
@@ -69,11 +78,14 @@ these changes do not create a stable release or a tag.
 
 ### Accuracy, fatigue and shot feedback
 
+- Align all 31 nominal shop prices with the retained Duck Hunt 2.11 reference;
+  correct items 8, 18, 23, 25, 29 and 30 while preserving every charge already
+  recorded in historical replay events.
 - Share one accuracy calculation between live shots and player profiles.
   Fatigue above 12 costs three accuracy points per extra fatigue point;
   endurance suppresses the penalty. Show the final probability and relevant
   fatigued marker without claiming fatigue caused any particular miss.
-- Make new 10 XP thermos purchases set fatigue to -3.00 and show before/after
+- Make new 15 XP thermos purchases set fatigue to -3.00 and show before/after
   values. Each negative point costs three accuracy points; show overexcitation
   in profiles, inventory and affected shots. Keep fixed-point arithmetic.
 - Compute scope bonuses as floor((100 - base accuracy percent) / 3), including
@@ -82,9 +94,10 @@ these changes do not create a stable release or a tag.
 - Count three unsuppressed misses per ordinary duck, shared across hunters,
   as configured in the supplied Tcl 2.11. Silencers and silent weapons do not
   add noise; golden and mechanical ducks are immune to noise escape.
-- Use plain missed-shot feedback. Explosive impacts use BOUM and triple damage;
-  golden impacts retain ammunition markers. Verify the lucky charm adds its
-  actual bonus: a standard 10 XP duck with a +6 charm awards 16 XP.
+- Restore weapon-specific missed-shot feedback: bows and crossbows use TCHAK,
+  explosive rounds use BOUM and other weapons use BANG. Golden impacts retain
+  ammunition markers. Verify the lucky charm adds its actual bonus: a standard
+  10 XP duck with a +6 charm awards 16 XP.
 
 ### Ranking, statistics and durability
 

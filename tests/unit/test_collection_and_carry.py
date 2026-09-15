@@ -167,7 +167,10 @@ class CollectionAndCarryTests(unittest.TestCase):
         self.assertEqual(settled.shop_credit, 64)
         self.assertEqual(len(completed.outcomes), 1)
         self.assertIs(completed.outcomes[0].letter_collection_completed, True)
-        self.assertIn("Collection complète", render_outcome(completed.outcomes[0])[0])
+        self.assertIn(
+            'reconstituer les mots "DUCK HUNT"',
+            render_outcome(completed.outcomes[0])[0],
+        )
 
     def test_completion_entropy_is_required_only_for_the_final_letter(self) -> None:
         incomplete = GameState(players=(PlayerState("hunter", "Hunter"),))

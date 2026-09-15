@@ -16,8 +16,9 @@ flight personality.
 
 The existing grey trail, bold silhouette and reset boundaries are preserved.
 A golden target deliberately uses the standard arrival projection: misses do
-not reveal it, and the first successful bang exposes its golden identity in the
-survival or kill response. Mechanical targets retain their explicit label.
+not reveal it, and the first successful impact exposes it as a `super-canard`
+in the survival or kill response. Mechanical targets retain their explicit
+label and electrical hit signature.
 Catalog entries are bounded plain UTF-8 text without
 URLs or IRC controls; framing adds presentation controls afterward and still
 enforces the complete 512-byte wire limit.
@@ -62,16 +63,22 @@ their actual remaining lifetime once. Curses are appended only when present.
 The same compact inventory response includes the daily duck bag, its carry
 state, the `DUCK HUNT` slots and an active TARDIS marker. Crossing the six- or
 eleven-duck boundary adds a short carry tag to the existing hit line. Completing
-the phrase emits one summary line regardless of bundle size. Successful shots
+the phrase emits one detailed reward line regardless of bundle size. Successful shots
 deliberately retain separate public hit and bush-search lines. The hit line uses
 the channel supplied by the IRC command context, one-decimal reaction time,
 total hunts, experience and level progression; it never embeds a
 deployment-specific channel name. It also retains the reference ammunition
-signature: explosive hits say `*BOUM*`, while ordinary and AP hits say
-`*BANG*`; a killed golden target additionally exposes `[mun. expl.]` or
-`[mun. AP]`. The renderer consumes the explicit ammunition item stored in the
-outcome rather than guessing from damage, because curse composition can alter
-damage independently.
+signature: explosive hits say `*BOUM*`, silent bows and crossbows say `*TCHAK*`,
+and other ordinary or AP hits say `*BANG*`; a killed super-canard additionally
+exposes `[mun. expl.]` or `[mun. AP]`. The renderer consumes the explicit
+ammunition item and settled player level stored in the outcome rather than
+guessing from damage, because curse composition can alter damage independently.
+
+Empty-magazine, unjam and exhausted-reserve responses include the settled
+round and magazine counts. Ordinary, super and mechanical escapes retain their
+distinct labels and trail, while a noise escape uses its own frightened trail.
+The active `!lastduck` response reports elapsed presence without publishing the
+remaining deadline.
 
 `!duckrank` defaults to five hunters while retaining the explicit 1–20
 boundary. Its first public line uses a compact colored podium with medals for
@@ -90,6 +97,9 @@ Successful purchases whose useful value is settled at runtime expose that exact
 value immediately: the targeting scope announces its accuracy percentage and
 the lucky charm announces its per-duck experience bonus. The renderer reads the
 value already stored in the transition outcome and never draws it again.
+Every supported shop item has an item-specific confirmation explaining its
+settled effect. Purchase credits, discounts and level loss remain suffix facts,
+so restoring established prose does not change any debit or grant.
 
 Wild shots use the historical explicit warning and show miss and wild penalties
 separately. A bang during the three-second post-kill grace window instead says
@@ -146,3 +156,5 @@ Bread inventory includes the relative time until the first remaining stack
 expires and states that one piece applies to one flight. No player-facing exact
 attraction or daily-flight deadline is disclosed. Owner planning shows separate
 attraction and expiry times privately and never promises absent bread.
+Consuming a piece is bookkeeping-only and emits no additional channel line; the
+purchase confirmation and inventory remain the visible sources of bread state.

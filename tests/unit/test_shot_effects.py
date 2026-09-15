@@ -175,7 +175,9 @@ class ShotEffectTests(unittest.TestCase):
         flight = start_flight(state, 200, lifetime_ns=10_000)
         result = apply_command(flight.state, "Hunter", SHOT, 300)
         self.assertEqual(result.outcomes[-1].experience_awarded, 17)
+        self.assertEqual(result.outcomes[-1].effect_magnitude, 7)
         self.assertEqual(result.state.players[0].experience, 304)
+        self.assertIn("[trèfle à 4 feuilles]", render_outcome(result.outcomes[-1])[0])
 
     def test_suppressor_prevents_noise_escape(self) -> None:
         state = equipped(9)

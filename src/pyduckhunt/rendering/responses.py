@@ -310,6 +310,44 @@ _LOOT_EQUIPMENT_PRESENTATION = LocalizedMapping({
 
 _VARIABLE_LOOT_EQUIPMENT_KEYS = frozenset(("targeting_scope", "lucky_charm"))
 
+_CURSE_PRESENTATION = LocalizedMapping({
+    "burden": (
+        "Malédiction de Pesanteur",
+        "tu te fatigues 2 fois plus vite pendant 24h.",
+    ),
+    "confusion": (
+        "Malédiction de Confusion",
+        "les canards et les super-canards te rapportent 2 fois moins d'xp pendant 24h.",
+    ),
+    "decay": (
+        "Malédiction de Décadence",
+        "ton arme a pris un sérieux coup de vieux et sa fiabilité est réduite de 33% pendant 24h.",
+    ),
+    "frenzy": (
+        "Malédiction de Frénésie",
+        "chacun de tes tirs consomme 2 munitions et fait 2 fois plus de dégâts pendant 4h. "
+        "Ta fatigue augmente aussi plus rapidement.",
+    ),
+    "one_armed": (
+        "Malédiction du Manchot",
+        "tu es devenu incapable de recharger ton arme mais tu peux encore tirer tant qu'il te "
+        "reste des munitions chargées. L'effet dure 3h.",
+    ),
+    "slowness": (
+        "Malédiction de Lenteur",
+        "chacun de tes tirs et de tes rechargements d'arme seront retardés de 5 secondes pendant 4h.",
+    ),
+    "tremor": (
+        "Malédiction du Tremblement",
+        "tu te mets à trembler comme une feuille, ce qui réduit ta précision de 25% pendant 24h.",
+    ),
+    "unerring_miss": (
+        "Malédiction de l'Indicible Raté",
+        "pendant 4h, chacun de tes tirs touchera obligatoirement quelque chose, et si ce n'est "
+        "pas un canard...",
+    ),
+})
+
 _INVENTORY_LABELS = LocalizedMapping({
     "large_ammo_bag": "grande gibecière",
     "extended_magazine": "chargeur étendu",
@@ -485,13 +523,180 @@ def _accuracy_text(state: GameState, player: PlayerState) -> str:
 
 
 def _shot_sound(outcome: Outcome) -> str:
-    sound = tr('BOUM') if outcome.ammunition_item_id == 4 else "BANG"
+    sound = (
+        tr('BOUM')
+        if outcome.ammunition_item_id == 4
+        else "TCHAK"
+        if outcome.player is not None and level_policy(outcome.player.level).silent
+        else "BANG"
+    )
     return f"{_BOLD}*{sound}*{_RESET}"
 
 
 def _golden_ammunition_tag(outcome: Outcome) -> str:
     label = {3: tr('mun. AP'), 4: tr('mun. expl.')}.get(outcome.ammunition_item_id)
     return "" if label is None else f" {_COLOR_GREEN}[{label}]{_RESET}"
+
+
+def _lucky_charm_tag(outcome: Outcome) -> str:
+    return (
+        ""
+        if outcome.effect_magnitude is None
+        else tr(' [trèfle à 4 feuilles]')
+    )
+
+
+def _recycled_tag(outcome: Outcome) -> str:
+    return tr(' [recyclé]') if outcome.ammunition_recycled else ""
+
+
+def _ammunition_status(
+    player: PlayerState | None,
+    *,
+    unlimited_magazines: bool = False,
+) -> str:
+    if player is None:
+        return tr(' | Mun. : ?/? | Charg. : ?/?')
+    magazines = (
+        tr('Inf.')
+        if unlimited_magazines
+        else f"{player.magazines}/{player.magazine_capacity}"
+    )
+    return tr(
+        ' | Mun. : {0}/{1} | Charg. : {2}',
+        player.ammo,
+        player.capacity,
+        magazines,
+    )
+
+
+def _purchase_tags(outcome: Outcome) -> str:
+    tags = ""
+    if outcome.shop_credit_spent:
+        tags += tr(" [bon d'achat]")
+    if outcome.discount_percent:
+        tags += tr(' [coupon promo.]')
+    return tags
+
+
+def _purchase_level_loss(outcome: Outcome) -> str:
+    if not outcome.levels_lost or outcome.player is None:
+        return ""
+    return tr(
+        " Ton achat t'a fait repasser au niveau {0} ({1}).",
+        outcome.player.level,
+        _level_title(outcome.player.level),
+    )
+
+
+def _round_name(player: PlayerState | None) -> tuple[str, str]:
+    weapon = None if player is None else level_policy(player.level).weapon_key
+    if weapon == "bow":
+        return tr('une flèche'), tr(' et tu la charges dans ton arme')
+    if weapon == "crossbow":
+        return tr('un carreau'), tr(" et tu l'insères dans ton arme")
+    return tr('une balle'), tr(" et tu l'insères dans ton arme")
+
+
+def _render_shop_purchase(
+    outcome: Outcome,
+    actor: str,
+    player: PlayerState | None,
+    channel: str | None,
+) -> str:
+    """Render a settled purchase with its concrete effect and legacy rhythm."""
+
+    cost = outcome.charged_experience
+    suffix = _purchase_level_loss(outcome) + _purchase_tags(outcome)
+    target = outcome.target or tr('cette cible')
+    if outcome.item_id == 1:
+        round_name, insertion = _round_name(player)
+        return tr("{0} > Tu achètes {1} en échange de {2} points d'xp{3}.{4}", actor, round_name, cost, insertion, suffix)
+    if outcome.item_id == 2:
+        return tr("{0} > Tu ajoutes un chargeur à ta réserve en échange de {1} points d'xp.{2}", actor, cost, suffix)
+    if outcome.item_id == 3:
+        return tr("{0} > Tu changes le type de tes munitions en munitions AP (dégâts x2 pendant 24h) en échange de {1} points d'xp.{2}", actor, cost, suffix)
+    if outcome.item_id == 4:
+        return tr("{0} > Tu changes le type de tes munitions en munitions explosives (dégâts x3 pendant 24h) en échange de {1} points d'xp.{2}", actor, cost, suffix)
+    if outcome.item_id == 5:
+        return tr("{0} > Tu rachètes l'arme qui t'avait été confisquée en échange de {1} points d'xp.{2}", actor, cost, suffix)
+    if outcome.item_id == 6:
+        return tr("{0} > Tu graisses ton arme en échange de {1} points d'xp. Le risque d'enrayage est réduit de moitié et la graisse protège une fois contre un jet de sable pendant 24h.{2}", actor, cost, suffix)
+    if outcome.item_id == 7:
+        magnitude = outcome.effect_magnitude
+        if type(magnitude) is not int or not 0 <= magnitude <= 15:
+            raise ValueError("targeting-scope purchase magnitude is invalid")
+        return tr("{0} > Tu ajoutes une lunette de visée à ton arme en échange de {1} points d'xp. Lunette pour 6 tirs : +{2} points de précision actuellement.{3}", actor, cost, magnitude, suffix)
+    if outcome.item_id == 8:
+        return tr("{0} > Tu ajoutes un détecteur infrarouge à ton arme en échange de {1} points d'xp. La gâchette sera bloquée en l'absence de canard pendant 24h, pour 6 utilisations.{2}", actor, cost, suffix)
+    if outcome.item_id == 9:
+        return tr("{0} > Tu ajoutes un silencieux à ton arme en échange de {1} points d'xp. Tes tirs ne risquent plus d'effrayer les canards pendant 24h.{2}", actor, cost, suffix)
+    if outcome.item_id == 10:
+        magnitude = outcome.effect_magnitude
+        if type(magnitude) is not int or not 1 <= magnitude <= 10:
+            raise ValueError("lucky-charm purchase magnitude is invalid")
+        point = tr('point') if magnitude == 1 else tr('points')
+        extra = tr('supplémentaire') if magnitude == 1 else tr('supplémentaires')
+        return tr("{0} > Tu achètes un trèfle à quatre feuilles en échange de {1} points d'xp. Ce porte-bonheur te fera gagner {2} {3} d'xp {4} pour chaque canard abattu pendant 24h.{5}", actor, cost, magnitude, point, extra, suffix)
+    if outcome.item_id == 11:
+        return tr("{0} > Tu achètes des lunettes de soleil en échange de {1} points d'xp. Tu es protégé contre l'éblouissement pendant 24h et en plus, c'est la classe !{2}", actor, cost, suffix)
+    if outcome.item_id == 12:
+        return tr("{0} > Tu fais sécher tes vêtements en échange de {1} points d'xp.{2}", actor, cost, suffix)
+    if outcome.item_id == 13:
+        return tr("{0} > Tu achètes un goupillon et remets ton arme en état en échange de {1} points d'xp.{2}", actor, cost, suffix)
+    if outcome.item_id == 14:
+        blocked = tr(" Les lunettes de soleil de {0} renvoient l'éblouissement.", target) if outcome.effect_blocked else tr(" La précision de son prochain tir est réduite de moitié.")
+        return tr("{0} > Tu éblouis {1} avec un miroir en échange de {2} points d'xp.{3}{4}", actor, target, cost, blocked, suffix)
+    if outcome.item_id == 15:
+        blocked = tr(" La protection de son arme absorbe le sable.") if outcome.effect_blocked else tr(" Le risque d'enrayage de son prochain tir est doublé.")
+        return tr("{0} > Tu jettes du sable dans l'arme de {1} en échange de {2} points d'xp.{3}{4}", actor, target, cost, blocked, suffix)
+    if outcome.item_id == 16:
+        blocked = tr(" Son imperméable le protège.") if outcome.effect_blocked else tr(" Sa précision est réduite pendant 1h.")
+        return tr("{0} > Tu jettes un seau d'eau sur {1} en échange de {2} points d'xp.{3}{4}", actor, target, cost, blocked, suffix)
+    if outcome.item_id == 17:
+        return tr("{0} > Tu sabotes l'arme de {1} en échange de {2} points d'xp. Elle explosera lors de son prochain tir.{3}", actor, target, cost, suffix)
+    if outcome.item_id == 18:
+        return tr("{0} > Tu souscris une assurance-vie en échange de {1} points d'xp. Pendant 1 semaine, ton prochain accident te rapportera trois fois le niveau du tireur.{2}", actor, cost, suffix)
+    if outcome.item_id == 19:
+        return tr("{0} > Tu souscris une assurance responsabilité civile en échange de {1} points d'xp. Les pénalités d'accident sont divisées par trois pendant 2 jours.{2}", actor, cost, suffix)
+    if outcome.item_id == 20:
+        return tr("{0} > Tu achètes et utilises un appeau en échange de {1} points d'xp, ce qui devrait attirer un canard dans les 10 prochaines minutes.{2}", actor, cost, suffix)
+    if outcome.item_id == 21:
+        count = outcome.channel_effect_count
+        if type(count) is not int or count < 1:
+            raise ValueError("bread purchase count is invalid")
+        bread = tr('morceau') if count == 1 else tr('morceaux')
+        channel_label = tr('le canal') if channel is None else channel
+        return tr("{0} > Tu achètes un morceau de pain en échange de {1} points d'xp, augmentant ainsi les chances d'attirer des canards pendant 1h et retardant leur départ. Il y a actuellement {2} {3} de pain sur {4}.{5}", actor, cost, count, bread, channel_label, suffix)
+    if outcome.item_id == 22:
+        return tr("{0} > Tu achètes un détecteur de canards en échange de {1} points d'xp. Tu seras averti par une notice lors de l'envol du prochain canard.{2}", actor, cost, suffix)
+    if outcome.item_id == 23:
+        return tr("{0} > Tu achètes un canard mécanique en échange de {1} points d'xp, puis tu le programmes pour décoller dans exactement 10mn.{2}", actor, cost, suffix)
+    if outcome.item_id == 24:
+        relief = _fatigue(abs(outcome.fatigue_changed_centi))
+        return tr("{0} > Tu achètes un expresso en échange de {1} points d'xp. Ton niveau de fatigue diminue de {2} points.{3}", actor, cost, relief, suffix)
+    if outcome.item_id == 25 and player is not None:
+        before = player.fatigue_centi - outcome.fatigue_changed_centi
+        feeling = (tr('Tu te sens en pleine forme mais un peu surexcité. [surexcité]')
+                   if player.fatigue_centi < 0 else tr('Tu te sens en pleine forme.')
+                   if player.fatigue_centi == 0 else "")
+        return tr("{0} > Tu achètes un thermos de café en échange de {1} points d'xp. Fatigue : {2} → {3}. {4}{5}", actor, cost, _fatigue(before), _fatigue(player.fatigue_centi), feeling, suffix)
+    if outcome.item_id == 26:
+        return tr("{0} > Tu achètes un imperméable en échange de {1} points d'xp. Tu es protégé contre les seaux d'eau pendant 24h.{2}", actor, cost, suffix)
+    if outcome.item_id == 27:
+        relief = _fatigue(abs(outcome.fatigue_changed_centi))
+        return tr("{0} > Tu offres un verre de gnôle à {1} en échange de {2} points d'xp. Sa fatigue diminue de {3} points, mais sa précision baisse de 10% pendant 1h.{4}", actor, target, cost, relief, suffix)
+    if outcome.item_id == 28:
+        increase = _fatigue(max(0, outcome.fatigue_changed_centi))
+        return tr("{0} > Tu offres une infusion de camomille à {1} en échange de {2} points d'xp. Sa fatigue augmente de {3} points pendant 1h.{4}", actor, target, cost, increase, suffix)
+    if outcome.item_id == 29:
+        return tr("{0} > Tu achètes un sauf-conduit en échange de {1} points d'xp. Pendant 24h, tu n'encours plus de pénalité ni de confiscation en cas d'accident de chasse.{2}", actor, cost, suffix)
+    if outcome.item_id == 30:
+        return tr("{0} > Tu installes un dispositif de rechargement automatique en échange de {1} points d'xp. Ton arme se recharge automatiquement pendant 24h tant qu'il reste des chargeurs.{2}", actor, cost, suffix)
+    if outcome.item_id == 31:
+        count = len(outcome.removed_curse_keys)
+        return tr("{0} > Tu accomplis un rituel de purification en échange de {1} points d'xp. {2} malédiction(s) dissipée(s).{3}", actor, cost, count, suffix)
+    return tr('{0} > Achat : {1} [{2} xp].{3}', actor, _item_label(outcome.item_id), cost, suffix)
 
 
 def _duration(elapsed_ns: int) -> str:
@@ -835,9 +1040,8 @@ def render_last_flight(
         if type(now_ns) is not int or not active_flight.spawned_at_ns <= now_ns < active_flight.expires_at_ns:
             raise ValueError("active-flight rendering requires its current game time")
         elapsed = _duration(now_ns - active_flight.spawned_at_ns)
-        remaining = _duration(active_flight.expires_at_ns - now_ns)
         return (
-            tr("Un canard est en vol depuis {0}; envol dans {1} s'il n'est pas touché.", elapsed, remaining),
+            tr('Le dernier canard a été aperçu il y a {0}. Il est toujours là.', elapsed),
         )
     if last_flight is None:
         return (tr("Aucun envol de canard n'a encore été enregistré."),)
@@ -847,13 +1051,30 @@ def render_last_flight(
         raise ValueError("last-flight rendering requires durable facts and current game time")
     ago = _duration(now_ns - last_flight.ended_at_ns)
     duration = _duration(last_flight.ended_at_ns - last_flight.spawned_at_ns)
+    kind = (
+        tr(", il s'agissait d'un super-canard")
+        if last_flight.kind is FlightKind.GOLDEN
+        else tr(", il s'agissait d'un canard mécanique")
+        if last_flight.kind is FlightKind.MECHANICAL
+        else ""
+    )
     if last_flight.conclusion is LastFlightConclusion.HIT:
-        result = tr('abattu par {0} en {1}', last_flight.actor, duration)
-    elif last_flight.conclusion is LastFlightConclusion.ESCAPED:
-        result = tr('envolé sans être touché après {0}', duration)
-    else:
-        result = tr('effrayé par un tir après {0}', duration)
-    return (tr('Dernier canard : {0}, il y a {1}.', result, ago),)
+        return (
+            tr(
+                'Le dernier canard a été aperçu il y a {0}{1}. Il a été abattu par {2}.',
+                ago,
+                kind,
+                last_flight.actor or tr('un chasseur'),
+            ),
+        )
+    reason = (
+        tr("Effrayé par tout ce bruit, il s'est enfui après {0}.", duration)
+        if last_flight.conclusion is LastFlightConclusion.FRIGHTENED
+        else tr("Las d'attendre, il s'est enfui après {0}.", duration)
+    )
+    return (
+        tr('Le dernier canard a été aperçu il y a {0}{1}. {2}', ago, kind, reason),
+    )
 
 
 @localized
@@ -935,7 +1156,14 @@ def render_outcome(
     if outcome.kind is OutcomeKind.FLIGHT_ALREADY_ACTIVE:
         return ()
     if outcome.kind is OutcomeKind.FLIGHT_EXPIRED:
-        return (tr("Le canard s'échappe. {0}·°'`'°-.,¸¸.·°'`{1}", _COLOR_GREY, _RESET),)
+        subject = (
+            tr('Le super-canard')
+            if outcome.flight_kind is FlightKind.GOLDEN
+            else tr('Le canard mécanique')
+            if outcome.flight_kind is FlightKind.MECHANICAL
+            else tr('Le canard')
+        )
+        return (tr("{0} s'échappe. {1}°'`'°-.,_,.-°'`{2}", subject, _COLOR_GREY, _RESET),)
     if outcome.kind is OutcomeKind.HIT:
         if channel is not None and (
             type(channel) is not str
@@ -945,36 +1173,89 @@ def render_outcome(
             raise ValueError("hit rendering channel is invalid")
         elapsed = "--" if outcome.elapsed_ms is None else format_duration_ms(outcome.elapsed_ms)
         total = "?" if player is None else str(player.hits)
-        level = "" if player is None else (
-            tr(' niv. {0} (progression : {1}/{2})', player.level, player.experience, experience_required(player.level))
-        )
+        promotion = ""
+        progress = ""
+        if player is not None and outcome.levels_gained:
+            promotion = tr(
+                ' Tu deviens chasseur niveau {0} : {1}.',
+                player.level,
+                _level_title(player.level),
+            )
+        elif player is not None:
+            progress = tr(
+                ' niv. {0} (progression : {1}/{2})',
+                player.level,
+                player.experience,
+                experience_required(player.level),
+            )
         total_label = tr('canard') if total == "1" else tr('canards')
         location = "" if channel is None else tr(' sur {0}', channel)
-        recycled = tr(' [munition recyclée]') if outcome.ammunition_recycled else ""
+        recycled = _recycled_tag(outcome)
         carry = _carry_tag(outcome.carry_fatigue_multiplier)
         ammunition = (
             _golden_ammunition_tag(outcome)
             if outcome.flight_kind is FlightKind.GOLDEN
             else ""
         )
-        target = (
-            tr('le {0}[CANARD DORÉ]{1}', _COLOR_GREEN, _RESET)
+        if outcome.flight_kind is FlightKind.MECHANICAL:
+            return (
+                tr(
+                    '{0} > {1}     Tu as eu le canard mécanique en {2}.     {3}\\_X<{4}   *BZZzZzt*{5}{6}',
+                    actor,
+                    _shot_sound(outcome),
+                    elapsed,
+                    _BOLD,
+                    _RESET,
+                    recycled,
+                    fatigued,
+                ),
+            )
+        special = (
+            tr(' (dont {0} super-canards)', "?" if player is None else player.golden_hits)
             if outcome.flight_kind is FlightKind.GOLDEN
-            else tr('le canard')
+            else ""
         )
+        target = tr('le super-canard') if outcome.flight_kind is FlightKind.GOLDEN else tr('le canard')
         return (
-            tr('{0} > {1}     Tu as eu {2} en {3}, ce qui te fait un total de {4} {5}{6}.     {7}\\_X<{8}   *COUAC*   {9}[{10} xp]{11}{12}{13}{14}{15}{16}', actor, _shot_sound(outcome), target, elapsed, total, total_label, location, _BOLD, _RESET, _COLOR_GREEN, outcome.experience_awarded, _RESET, level, recycled, ammunition, carry, fatigued),
+            tr('{0} > {1}     Tu as eu {2} en {3}, ce qui te fait un total de {4} {5}{6}{7}.{8}     {9}\\_X<{10}   *COUAC*   {11}[{12} xp]{13}{14}{15}{16}{17}{18}{19}', actor, _shot_sound(outcome), target, elapsed, total, total_label, special, location, promotion, _BOLD, _RESET, _COLOR_GREEN, outcome.experience_awarded, _RESET, _lucky_charm_tag(outcome), ammunition, recycled, carry, fatigued, progress),
         )
     if outcome.kind is OutcomeKind.LOOT_ACQUIRED:
         rarity = _loot_rarity_tag(outcome.loot_key)
         if outcome.letter_collection_completed:
+            letter = _LOOT_LABELS.get(outcome.loot_key or "", tr('une lettre en bois'))
             return (
-                tr('{0} > {1}[DUCK HUNT]{2} Collection complète : lot aléatoire, bon de 50 xp et munitions réapprovisionnées.{3}', actor, _COLOR_GREEN, _RESET, rarity),
+                tr('{0} > En fouillant les buissons autour du canard, tu trouves {1} qui te manquait, ce qui te permet enfin de reconstituer les mots "DUCK HUNT" ! Tu gagnes un lot d\'items aléatoires, un bon d\'achat d\'une valeur de 50 xp et un réapprovisionnement en munitions. Consulte ton inventaire en tapant !inventory pour voir tes gains.{2}', actor, letter, rarity),
             )
         if (outcome.loot_key or "").startswith("letter_") and player is not None:
             label = _LOOT_LABELS[outcome.loot_key or ""]
             return (
-                tr('{0} > {1}[Butin]{2} {3} | lettres : {4}{5}', actor, _COLOR_GREEN, _RESET, label, _letter_status(player), rarity),
+                tr('{0} > En fouillant les buissons autour du canard, tu trouves {1}. Reconstitue les mots "DUCK HUNT" pour gagner un lot. Lettres possédées : {2}.{3}', actor, label, _letter_status(player), rarity),
+            )
+        if (outcome.loot_key or "").startswith("xp_"):
+            promotion = (
+                ""
+                if player is None or not outcome.levels_gained
+                else tr(
+                    ' Tu deviens chasseur niveau {0} : {1}.',
+                    player.level,
+                    _level_title(player.level),
+                )
+            )
+            return (
+                tr("{0} > En fouillant les buissons autour du canard, tu trouves un magazine de chasse. Sa lecture te rapporte {1} points d'xp !{2}{3} {4}[{1} xp]{5}", actor, outcome.experience_awarded, promotion, rarity, _COLOR_GREEN, _RESET),
+            )
+        if (outcome.loot_key or "").startswith("voucher_"):
+            return (
+                tr("{0} > En fouillant les buissons autour du canard, tu trouves un bon d'achat d'une valeur de {1} points d'xp à valoir dans le shop.{2}", actor, outcome.shop_credit_awarded, rarity),
+            )
+        if outcome.curse_key is not None:
+            title, description = _CURSE_PRESENTATION[outcome.curse_key]
+            return (
+                tr('{0} > En fouillant les buissons autour du canard, tu trouves un parchemin portant le sceau de la CCCCC (Commission de Contrôle des Chasseurs de Canards Confirmés) et comportant la {1} : {2}{3}', actor, title, description, rarity),
+            )
+        if outcome.loot_key == "junk_letter_q":
+            return (
+                tr('{0} > En fouillant les buissons autour du canard, tu trouves... une lettre Q en bois. Elle ne semble pas faire partie du jeu.', actor),
             )
         equipment = _loot_equipment_presentation(outcome)
         if equipment is not None:
@@ -989,26 +1270,30 @@ def render_outcome(
         )
     if outcome.kind is OutcomeKind.CURSE_NEUTRALIZED:
         return (
-            tr('{0} > Ton amulette de bénédiction neutralise la malédiction.', actor),
+            tr('{0} > Ton amulette de bénédiction se met à vibrer et disparaît, emportant la malédiction avec elle. {1}[amulette]{2}', actor, _COLOR_GREEN, _RESET),
         )
     if outcome.kind is OutcomeKind.MILESTONE_CREDIT:
+        total = "?" if player is None else player.hits
         return (
-            tr("{0} > {1}[Palier]{2} Bon d'achat : {3} xp.", actor, _COLOR_GREEN, _RESET, outcome.shop_credit_awarded),
+            tr("{0} > Tu viens d'abattre ton {1}ème canard, ce qui te fait gagner un bon d'achat d'une valeur de {2} points d'xp à valoir dans le shop !", actor, total, outcome.shop_credit_awarded),
         )
     if outcome.kind is OutcomeKind.REWARD_TRIGGERED:
         if outcome.triggered_item_id == 21:
-            return (tr('{0} > Ton amulette fait apparaître du pain sur le canal.', actor),)
+            channel_label = tr('le canal') if channel is None else channel
+            return (tr("{0} > Ton Amulette du Boulanger fait apparaître un morceau de pain sur {1}. {2}[amulette]{3}", actor, channel_label, _COLOR_GREEN, _RESET),)
         return (
-            tr('{0} > Ton amulette programme un canard mécanique dans 10mn00s.', actor),
+            tr('{0} > Ton Amulette du Farceur programme un canard mécanique dans 10mn00s. {1}[amulette]{2}', actor, _COLOR_GREEN, _RESET),
         )
     if outcome.kind is OutcomeKind.FLIGHT_SURVIVED:
         if outcome.flight_kind is FlightKind.GOLDEN:
             return (
-                tr("{0} > {1} C'est un {2}[CANARD DORÉ]{3} ! Il a survécu. [vie -{4}]{5}", actor, _shot_sound(outcome), _COLOR_GREEN, _RESET, outcome.damage_dealt, fatigued),
+                tr("{0} > {1}     Le super-canard a survécu ! Essaie encore.   {2}\\_O<{3}  [vie -{4}]{5}{6}", actor, _shot_sound(outcome), _BOLD, _RESET, outcome.damage_dealt, _recycled_tag(outcome), fatigued),
             )
-        return (tr('{0} > Le canard a survécu. [vie -{1}]{2}', actor, outcome.damage_dealt, fatigued),)
+        if outcome.flight_kind is FlightKind.MECHANICAL:
+            return (tr('{0} > {1}     Le canard mécanique a survécu.   {2}\\_O<{3}  [vie -{4}]{5}{6}', actor, _shot_sound(outcome), _BOLD, _RESET, outcome.damage_dealt, _recycled_tag(outcome), fatigued),)
+        return (tr('{0} > {1}     Le canard a survécu.   {2}\\_O<{3}  [vie -{4}]{5}{6}', actor, _shot_sound(outcome), _BOLD, _RESET, outcome.damage_dealt, _recycled_tag(outcome), fatigued),)
     if outcome.kind is OutcomeKind.MISS:
-        recycled = tr(' [munition recyclée]') if outcome.ammunition_recycled else ""
+        recycled = _recycled_tag(outcome)
         miss = tr('{0}[raté : -{1} xp]{2}', _COLOR_RED, outcome.miss_penalty, _RESET)
         if outcome.flight_id is None:
             wild = tr('{0}[tir sauvage : -{1} xp]{2}', _COLOR_RED, outcome.wild_penalty, _RESET)
@@ -1016,16 +1301,16 @@ def render_outcome(
                 tr("{0} > Par chance tu as raté, mais tu visais qui au juste ? Il n'y a aucun canard dans le coin...   {1} {2}{3}", actor, miss, wild, recycled),
             )
         return (
-            tr('{0} > Raté. {1}{2}{3}', actor, miss, recycled, fatigued),
+            tr('{0} > {1}     Raté. {2}{3}{4}', actor, _shot_sound(outcome), miss, recycled, fatigued),
         )
     if outcome.kind is OutcomeKind.LATE_SHOT:
         delay = "--" if outcome.late_by_ms is None else format_duration_ms(outcome.late_by_ms)
-        recycled = tr(' [munition recyclée]') if outcome.ammunition_recycled else ""
+        recycled = _recycled_tag(outcome)
         return (
             tr("{0} > C'est raté, tu as tiré {1} trop tard.   {2}[raté : -{3} xp]{4}{5}", actor, delay, _COLOR_RED, outcome.miss_penalty, _RESET, recycled),
         )
     if outcome.kind is OutcomeKind.EMPTY:
-        return (tr('{0} > {1}*CLIC*{2} CHARGEUR VIDE', actor, _COLOR_GREY, _RESET),)
+        return (tr('{0} > {1}*CLIC*{2}     CHARGEUR VIDE{3}', actor, _COLOR_GREY, _RESET, _ammunition_status(player, unlimited_magazines=outcome.unlimited_magazines)),)
     if outcome.kind is OutcomeKind.JAMMED:
         return (tr('{0} > {1}*CLAC*{2} ARME ENRAYÉE', actor, _COLOR_GREY, _RESET),)
     if outcome.kind is OutcomeKind.RELOADED:
@@ -1042,7 +1327,7 @@ def render_outcome(
             tr('{0} > {1}*CLAC CLAC*{2} Tu recharges. | Mun. : {3} | Charg. : {4}{5}', actor, _COLOR_GREY, _RESET, ammo, magazines, automatic),
         )
     if outcome.kind is OutcomeKind.UNJAMMED:
-        return (tr('{0} > {1}*Crr..CLIC*{2} Tu décoinces ton arme.', actor, _COLOR_GREY, _RESET),)
+        return (tr('{0} > {1}*Crr..CLIC*{2}     Tu décoinces et recharges ton arme.{3}', actor, _COLOR_GREY, _RESET, _ammunition_status(player, unlimited_magazines=outcome.unlimited_magazines)),)
     if outcome.kind is OutcomeKind.ALREADY_LOADED:
         if player is None:
             return (tr("{0} > Ton arme n'a pas besoin d'être rechargée.", actor),)
@@ -1055,7 +1340,7 @@ def render_outcome(
             tr("{0} > Ton arme n'a pas besoin d'être rechargée. | Mun. : {1}/{2} | Charg. : {3}", actor, player.ammo, player.capacity, magazines),
         )
     if outcome.kind is OutcomeKind.NO_RESERVE:
-        return (tr('{0} > Tu es à court de chargeurs.', actor),)
+        return (tr('{0} > Tu es à court de chargeurs.{1}', actor, _ammunition_status(player, unlimited_magazines=outcome.unlimited_magazines)),)
     if outcome.kind is OutcomeKind.COMMAND_DELAYED:
         return (tr('{0} > Ton action est retardée de 5s par une malédiction.', actor),)
     if outcome.kind is OutcomeKind.COMMAND_THROTTLED:
@@ -1073,7 +1358,7 @@ def render_outcome(
     if outcome.kind is OutcomeKind.TRIGGER_LOCKED:
         return (tr('{0} > {1}*CLIC*{2} Gâchette verrouillée.', actor, _COLOR_GREY, _RESET),)
     if outcome.kind is OutcomeKind.FLIGHT_FRIGHTENED:
-        return (tr("Effrayé par tout ce bruit, le canard s'échappe."),)
+        return (tr("Effrayé par tout ce bruit, le canard s'échappe.     {0}·°'`'°-.,¸¸.·°'`{1}", _COLOR_GREY, _RESET),)
     if outcome.kind is OutcomeKind.HUNT_BLOCKED:
         return (tr('{0} > Tu ne peux pas chasser pour le moment.', actor),)
     if outcome.kind is OutcomeKind.WEAPON_CONFISCATED:
@@ -1087,85 +1372,32 @@ def render_outcome(
     ):
         return (_render_incident(outcome, None),)
     if outcome.kind is OutcomeKind.SHOP_PURCHASED:
-        tags = ""
-        if outcome.shop_credit_spent:
-            tags += tr(" [bon d'achat]")
-        if outcome.discount_percent:
-            tags += tr(' [coupon promo.]')
-        if outcome.item_id == 25 and player is not None:
-            before = player.fatigue_centi - outcome.fatigue_changed_centi
-            feeling = (tr('Tu te sens en pleine forme mais un peu surexcité. [surexcité]')
-                       if player.fatigue_centi < 0 else tr('Tu te sens en pleine forme.')
-                       if player.fatigue_centi == 0 else "")
-            return (
-                tr("{0} > Tu achètes un thermos de café en échange de {1} points d'xp. Fatigue : {2} → {3}. {4}{5}", actor, outcome.charged_experience, _fatigue(before), _fatigue(player.fatigue_centi), feeling, tags),
-            )
-        if outcome.item_id == 7:
-            magnitude = outcome.effect_magnitude
-            if type(magnitude) is not int or not 0 <= magnitude <= 15:
-                raise ValueError("targeting-scope purchase magnitude is invalid")
-            return (
-                tr("{0} > Tu ajoutes une lunette de visée à ton arme en échange de {1} points d'xp. Lunette pour 6 tirs : +{2} points de précision actuellement.{3}", actor, outcome.charged_experience, magnitude, tags),
-            )
-        if outcome.item_id == 10:
-            magnitude = outcome.effect_magnitude
-            if type(magnitude) is not int or not 1 <= magnitude <= 10:
-                raise ValueError("lucky-charm purchase magnitude is invalid")
-            point = tr('point') if magnitude == 1 else tr('points')
-            extra = tr('supplémentaire') if magnitude == 1 else tr('supplémentaires')
-            return (
-                tr((
-                    "{0} > Tu achètes un trèfle à quatre feuilles en échange de {1} points d'xp. Ce "
-                    "porte-bonheur te fera gagner {2} {3} d'xp {4} pour chaque canard abattu pendant 24h.{5}"
-                ), actor, outcome.charged_experience, magnitude, point, extra, tags),
-            )
-        if outcome.item_id == 21:
-            count = outcome.channel_effect_count
-            if type(count) is not int or count < 1:
-                raise ValueError("bread purchase count is invalid")
-            bread = tr('morceau') if count == 1 else tr('morceaux')
-            channel_label = tr('le canal') if channel is None else channel
-            if outcome.due_at_ns is not None:
-                return (
-                    tr((
-                        "{0} > Tu achètes un morceau de pain en échange de {1} points d'xp. Pendant 1h au maximum, "
-                        "il attire un canard ; le premier envol consomme un morceau et reste 20s de plus. "
-                        'Karma temporaire : +2,00. Il y a actuellement {2} {3} de pain sur {4}.{5}'
-                    ), actor, outcome.charged_experience, count, bread, channel_label, tags),
-                )
-            if outcome.effect_magnitude == 20:
-                return (
-                    tr((
-                        "{0} > Tu achètes un morceau de pain en échange de {1} points d'xp. Pendant 1h, il "
-                        "renforce l'attraction et retarde le départ des nouveaux canards de 20s par morceau. Il "
-                        'reste en place à chaque envol. Karma temporaire : +2,00. Il y a actuellement {2} {3} de '
-                        'pain sur {4}.{5}'
-                    ), actor, outcome.charged_experience, count, bread, channel_label, tags),
-                )
-            return (
-                tr((
-                    "{0} > Tu achètes un morceau de pain en échange de {1} points d'xp. Il reste disponible "
-                    "pendant 1h ou jusqu'au prochain envol, qui en consommera un. Ton karma temporaire "
-                    'augmente aussi de 2,00. Il y a actuellement {2} {3} de pain sur {4}.{5}'
-                ), actor, outcome.charged_experience, count, bread, channel_label, tags),
-            )
-        if outcome.item_id == 20:
-            return (
-                tr("{0} > Tu achètes et utilises un appeau en échange de {1} points d'xp, ce qui devrait attirer un canard dans les 10 prochaines minutes.{2}", actor, outcome.charged_experience, tags),
-            )
-        return (
-            tr('{0} > Achat : {1} [{2} xp].{3}', actor, _item_label(outcome.item_id), outcome.charged_experience, tags),
-        )
+        return (_render_shop_purchase(outcome, actor, player, channel),)
     if outcome.kind is OutcomeKind.SHOP_UNKNOWN_ITEM:
         return (tr("{0} > Cet objet n'existe pas.", actor),)
     if outcome.kind is OutcomeKind.SHOP_INSUFFICIENT_EXPERIENCE:
-        return (tr("{0} > Tu n'es pas assez riche pour cet achat.", actor),)
+        return (tr("{0} > Tu n'es pas assez riche pour effectuer cet achat.", actor),)
     if outcome.kind is OutcomeKind.SHOP_NOT_APPLICABLE:
+        if outcome.item_id == 1:
+            return (tr('{0} > Le chargeur de ton arme est déjà plein.', actor),)
+        if outcome.item_id == 2:
+            return (tr('{0} > Ta réserve de chargeurs est déjà pleine.', actor),)
+        if outcome.item_id == 5:
+            return (tr('{0} > Tu as déjà ton arme.', actor),)
+        if outcome.item_id == 12:
+            return (tr('{0} > Tes vêtements sont déjà secs.', actor),)
+        if outcome.item_id == 13:
+            return (tr("{0} > Ton arme n'a pas besoin d'être remise en état.", actor),)
         if outcome.item_id == 21:
-            return (tr('{0} > Il y a déjà 20 morceaux de pain sur le canal ; achat refusé sans dépense.', actor),)
+            channel_label = tr('le canal') if channel is None else channel
+            return (tr("{0} > Il y a déjà 20 morceaux de pain sur {1}, ça devrait suffire pour l'instant.", actor, channel_label),)
+        if outcome.item_id in (24, 25):
+            return (tr("{0} > Tu n'es pas assez fatigué pour utiliser cet objet.", actor),)
+        if outcome.item_id == 31:
+            return (tr("{0} > Tu ne souffres d'aucune malédiction.", actor),)
         return (tr("{0} > Cet achat n'est pas utile actuellement.", actor),)
     if outcome.kind is OutcomeKind.SHOP_EFFECT_ACTIVE:
-        return (tr('{0} > {1} est déjà actif.', actor, _item_label(outcome.item_id)),)
+        return (tr('{0} > Tu possèdes déjà cet item.', actor),)
     if outcome.kind is OutcomeKind.SHOP_TARGET_REQUIRED:
         return (tr('{0} > Cet achat nécessite une cible.', actor),)
     if outcome.kind is OutcomeKind.SHOP_TARGET_UNKNOWN:
@@ -1179,8 +1411,6 @@ def render_outcome(
             tr("{0} > L'arme de {1} est immunisée contre cette nuisance.", actor, outcome.target or tr('cette cible')),
         )
     if outcome.kind is OutcomeKind.EFFECT_CONSUMED:
-        if outcome.item_id == 21:
-            return (tr('Le canard mange un morceau de pain posé sur le canal.'),)
         return ()
     if outcome.kind in (
         OutcomeKind.EFFECT_EXPIRED,

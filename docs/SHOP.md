@@ -3,6 +3,8 @@
 The shop is split into catalog, pricing and settlement. The observed 1–31
 surface now has explicit nominal prices and deterministic boundaries.
 
+Nominal prices follow the retained Duck Hunt 2.11 shop reference table.
+
 ## Supported catalog slice
 
 | ID | Stable key | Nominal XP | Grant | Scope | Boundary |
@@ -14,7 +16,7 @@ surface now has explicit nominal prices and deterministic boundaries.
 | 5 | `weapon_return` | 40 | direct | player | confiscated weapon only |
 | 6 | `weapon_grease` | 5 | effect | player | 24 hours |
 | 7 | `targeting_scope` | 5 | effect | player | 6 uses; floor((100 − base accuracy) / 3) points |
-| 8 | `infrared_lock` | 15 | effect | player | 6 uses or 24 hours |
+| 8 | `infrared_lock` | 8 | effect | player | 6 uses or 24 hours |
 | 9 | `suppressor` | 5 | effect | player | 24 hours |
 | 10 | `lucky_charm` | 13 | effect | player | 24 hours |
 | 11 | `sunglasses` | 5 | effect | player | 24 hours |
@@ -24,19 +26,19 @@ surface now has explicit nominal prices and deterministic boundaries.
 | 15 | `weapon_sand` | 7 | target effect | player | next trigger pull |
 | 16 | `soaked_clothes` | 10 | target effect | player | 1 hour |
 | 17 | `weapon_sabotage` | 14 | target effect | player | next trigger pull |
-| 18 | `life_insurance` | 8 | effect | player | 1 use or 7 days |
+| 18 | `life_insurance` | 5 | effect | player | 1 use or 7 days |
 | 19 | `liability_insurance` | 5 | effect | player | 2 days |
 | 20 | `duck_call` | 8 | scheduled action | channel | injected within 10 minutes |
 | 21 | `channel_bread` | 4 | effect | channel | at most 1 hour; one attraction; consumed at first takeoff; +20s |
 | 22 | `duck_detector` | 4 | effect | player | next successful flight |
-| 23 | `mechanical_duck` | 20 | scheduled action | channel | exactly 10 minutes |
+| 23 | `mechanical_duck` | 10 | scheduled action | channel | exactly 10 minutes |
 | 24 | `espresso` | 5 | fatigue relief | player | up to 5 settled points |
-| 25 | `coffee_thermos` | 10 | fatigue target | player | sets fatigue to -3.00; overexcitation |
+| 25 | `coffee_thermos` | 15 | fatigue target | player | sets fatigue to -3.00; overexcitation |
 | 26 | `raincoat` | 15 | effect | player | 24 hours |
 | 27 | `strong_tonic` | 10 | target effect | player | 1 hour |
 | 28 | `herbal_infusion` | 9 | target effect | player | 1 hour |
-| 29 | `safe_conduct` | 15 | effect | player | 24 hours |
-| 30 | `automatic_reloader` | 20 | effect | player | 24 hours |
+| 29 | `safe_conduct` | 10 | effect | player | 24 hours |
+| 30 | `automatic_reloader` | 10 | effect | player | 24 hours |
 | 31 | `purification_ritual` | 30 | direct | player | active curses only |
 
 The two ammunition types share one exclusive group, so buying either replaces
@@ -89,8 +91,8 @@ when offered to another player. A rejected purchase changes no karma. The
 modifier is bounded to ±100.00 and moves 0.12 toward zero every two hours.
 
 Espresso records concrete fixed-point relief bounded by 5.00 and the current
-profile. A newly purchased thermos sets fatigue to -3.00, at the unchanged catalog
-price of 10 XP. Each point below zero costs three accuracy percentage points,
+profile. A newly purchased thermos sets fatigue to -3.00 at its 15 XP reference
+price. Each point below zero costs three accuracy percentage points,
 so -3.00 costs nine points. The purchase confirmation gives the before/after
 values. This is a fixed target, not a ten-point reduction or a random draw.
 Active endurance suppresses this penalty. Historical journal targets from 0.00

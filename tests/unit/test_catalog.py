@@ -21,7 +21,7 @@ class CatalogTests(unittest.TestCase):
             tuple(range(1, 32)),
         )
 
-    def test_nominal_costs_match_the_calibrated_slice(self) -> None:
+    def test_nominal_costs_match_the_tcl_211_reference(self) -> None:
         self.assertEqual(
             {item.item_id: item.base_cost for item in SHOP_CATALOG},
             {
@@ -32,7 +32,7 @@ class CatalogTests(unittest.TestCase):
                 5: 40,
                 6: 5,
                 7: 5,
-                8: 15,
+                8: 8,
                 9: 5,
                 10: 13,
                 11: 5,
@@ -42,19 +42,19 @@ class CatalogTests(unittest.TestCase):
                 15: 7,
                 16: 10,
                 17: 14,
-                18: 8,
+                18: 5,
                 19: 5,
                 20: 8,
                 21: 4,
                 22: 4,
-                23: 20,
+                23: 10,
                 24: 5,
-                25: 10,
+                25: 15,
                 26: 15,
                 27: 10,
                 28: 9,
-                29: 15,
-                30: 20,
+                29: 10,
+                30: 10,
                 31: 30,
             },
         )

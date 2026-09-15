@@ -39,10 +39,13 @@ class ThermosOverexcitationTests(unittest.TestCase):
                 self.assertEqual(event.fatigue_target_centi, -300)
                 result = apply_replay_event(state, event)
                 player = result.state.player('hunter')
-                self.assertEqual((player.fatigue_centi, player.experience, player.experience_spent), (-300, 34, 10))
+                self.assertEqual(
+                    (player.fatigue_centi, player.experience, player.experience_spent),
+                    (-300, 29, 15),
+                )
                 self.assertEqual(result.outcomes[-1].fatigue_changed_centi, -300-before)
                 text = ' '.join(render_outcomes(result.outcomes))
-                for part in ('→ -3', '[surexcité]', '10 points'):
+                for part in ('→ -3', '[surexcité]', '15 points'):
                     self.assertIn(part, text)
 
     def test_negative_state_and_purchase_event_roundtrip(self):
