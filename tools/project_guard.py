@@ -51,15 +51,11 @@ BLOCKED_WINDOW_DIGESTS = {
     5: {
         "5aaaa62ecf0aff849f36f52d6640ca4995acfadc64ed340584eb6f7b8f2b00ea",
     },
-    7: {
-        "6a082c833e642de9ae1b223852e70fb6937a3ca293ccf5faf701f0093f824e69",
-        "c1cb6b91008e205f7b37e66d719f7ace437fc7cad44195abfb00b6c5c634a944",
-    },
 }
 
-# The original-author name and scripts.eggdrop.fr are intentionally public in
-# the required CC BY-NC-SA 3.0 attribution. They are therefore not part of the
-# private-identifier digest set.
+# The original-author name, boulets.eggdrop.fr, its #boulets channel, and
+# scripts.eggdrop.fr are intentionally public in the required CC BY-NC-SA 3.0
+# attribution. They are therefore not part of the private-identifier digest set.
 
 SECRET_PATTERNS = {
     "private key": re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),

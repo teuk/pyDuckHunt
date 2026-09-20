@@ -7,7 +7,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "https://github.com/teuk/pyDuckHunt"
-CREDIT = "https://scripts.eggdrop.fr/details-Duck+Hunt-s228.html"
+LICENSE_CREDIT = "https://scripts.eggdrop.fr/details-Duck+Hunt-s228.html"
+README_CREDIT = "https://boulets.eggdrop.fr/"
+README_TCL_SCRIPTS = "https://boulets.eggdrop.fr/tcl/scripts/index.html"
 
 
 class RepositoryContractTests(unittest.TestCase):
@@ -17,9 +19,11 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("CC BY-NC-SA 3.0", license_text)
         self.assertIn("Attribution-NonCommercial-ShareAlike 3.0 Unported", license_text)
         self.assertIn("Credits: MenzAgitat", license_text)
-        self.assertIn(CREDIT, license_text)
-        self.assertIn("Credits: [MenzAgitat]", readme)
-        self.assertIn(CREDIT, readme)
+        self.assertIn(LICENSE_CREDIT, license_text)
+        self.assertIn("All our greetings and thanks go to [MenzAgitat]", readme)
+        self.assertIn(README_CREDIT, readme)
+        self.assertIn(README_TCL_SCRIPTS, readme)
+        self.assertIn("Duck Hunt running on `#boulets` on `irc.epiknet.org`", readme)
 
     def test_package_metadata_points_to_the_public_repository(self) -> None:
         metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))

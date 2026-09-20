@@ -84,9 +84,16 @@ PYTHONPATH=src .venv/bin/python tools/validate.py --lane fast --progress
 The full lane is run once before a final commit; see [release workflow](docs/RELEASING.md).
 Keep runtime data, credentials and private logs outside Git.
 
-## License and credits
+## Origins, license and credits
 
-[CC BY-NC-SA 3.0](LICENSE). Credits: [MenzAgitat](https://scripts.eggdrop.fr/details-Duck+Hunt-s228.html),
-author of the original Duck Hunt Tcl game.
+[CC BY-NC-SA 3.0](LICENSE).
 
-Special thanks to **gaby** for live testing and detailed player feedback.
+All our greetings and thanks go to [MenzAgitat](https://boulets.eggdrop.fr/). This Python version is heavily inspired by the Duck Hunt running on `#boulets` on `irc.epiknet.org`.
+
+Website: [https://boulets.eggdrop.fr](https://boulets.eggdrop.fr/)
+
+Tcl scripts: [https://boulets.eggdrop.fr/tcl/scripts/index.html](https://boulets.eggdrop.fr/tcl/scripts/index.html)
+
+Eggdrop aficionados may prefer MenzAgitat’s original Tcl scripts — version 3.x is coming, so stay tuned.
+
+Special thanks to gaby for live testing and detailed player feedback.
