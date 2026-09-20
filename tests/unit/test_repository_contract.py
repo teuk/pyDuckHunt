@@ -10,6 +10,7 @@ REPOSITORY = "https://github.com/teuk/pyDuckHunt"
 LICENSE_CREDIT = "https://scripts.eggdrop.fr/details-Duck+Hunt-s228.html"
 README_CREDIT = "https://boulets.eggdrop.fr/"
 README_TCL_SCRIPTS = "https://boulets.eggdrop.fr/tcl/scripts/index.html"
+README_DUCKHUNT_211 = "https://scripts.eggdrop.fr/details-Duck+Hunt-s228.html"
 
 
 class RepositoryContractTests(unittest.TestCase):
@@ -23,6 +24,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("All our greetings and thanks go to [MenzAgitat]", readme)
         self.assertIn(README_CREDIT, readme)
         self.assertIn(README_TCL_SCRIPTS, readme)
+        self.assertIn(f"DuckHunt 2.11 Tcl: [{README_DUCKHUNT_211}]", readme)
         self.assertIn("Duck Hunt running on `#boulets` on `irc.epiknet.org`", readme)
 
     def test_package_metadata_points_to_the_public_repository(self) -> None:

@@ -94,6 +94,8 @@ Website: [https://boulets.eggdrop.fr](https://boulets.eggdrop.fr/)
 
 Tcl scripts: [https://boulets.eggdrop.fr/tcl/scripts/index.html](https://boulets.eggdrop.fr/tcl/scripts/index.html)
 
+DuckHunt 2.11 Tcl: [https://scripts.eggdrop.fr/details-Duck+Hunt-s228.html](https://scripts.eggdrop.fr/details-Duck+Hunt-s228.html)
+
 Eggdrop aficionados may prefer MenzAgitat’s original Tcl scripts — version 3.x is coming, so stay tuned.
 
 Special thanks to gaby for live testing and detailed player feedback.
