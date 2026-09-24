@@ -14,6 +14,13 @@ these changes do not create a stable release or a tag.
 
 ### Public beta onboarding and release preparation
 
+- Add a bounded, offline observation-coverage analyzer for the private
+  `IO-001` through `IO-020` ledger. It validates the complete journal chain,
+  validates a sealed snapshot boundary, replays only subsequent context,
+  reports aggregate counters only and leaves restart, reboot, reconnect,
+  nickname and Owner-presentation proof explicitly external.
+- Keep the analyzer separate from the runtime: no IRC connection, state write,
+  gameplay change, entropy draw, service restart or public evidence export.
 - Keep the English-first README concise and add a documentation index,
   troubleshooting guide and evidence-based beta exit roadmap.
 - Add language and environment fields to bug reports, simplify player feature

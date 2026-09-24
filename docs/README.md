@@ -23,7 +23,7 @@ Use `./install.sh --language fr` for French. Both instances use the same game en
 | [Operator pilot](OPERATOR_PILOT.md) · [Controlled pilot](CONTROLLED_PILOT.md) | Target allowlists and live acceptance |
 | [Systemd](SYSTEMD_SERVICE.md) · [Unit templates](../packaging/systemd/README.md) | Background services; adapt the supplied pilot paths |
 | [Partyline](PARTYLINE.md) | Owner authentication, private planning and administration |
-| [Persistence](PERSISTENCE.md) · [Privacy](PRIVACY.md) | Journal, snapshots and private data boundaries |
+| [Persistence](PERSISTENCE.md) · [Privacy](PRIVACY.md) · [Observation coverage](OBSERVATION_COVERAGE.md) | Journal, snapshots and private evidence boundaries |
 | [Web rankings](RANKING_PAGE.md) · [Metrics](METRICS_GRAFANA.md) | Optional publication and monitoring |
 
 ## Develop and review
