@@ -162,7 +162,7 @@ class BreadRuleTests(unittest.TestCase):
         self.assertNotIn('consomme un morceau', text)
         inventory = ' '.join(render_inventory(bought.state, 'Hunter'))
         self.assertIn('un morceau par envol, +20s pour ce canard', inventory)
-        self.assertIn('première expiration', inventory)
+        self.assertNotIn('première expiration', inventory)
         private = plan(bought.state, SECOND)
         self.assertIn('le prochain envol consomme un morceau', private)
         self.assertIn('Attractions des pains:', private)

@@ -198,7 +198,7 @@ class BilingualTests(unittest.TestCase):
         fixture.runtime.dispatch(ReplayEvent.enable_hourly_bread(0), lambda _: ())
         dcc = fixture._bootstrap_over_offered_dcc('isolated bilingual test password')
         start = len(fixture.wires)
-        for now, command in enumerate(('!pain', '!appeau', '!duckplanning'), 20):
+        for now, command in enumerate(('!bread', '!duckcall', '!duckplanning'), 20):
             fixture.controller.handle_irc(now, parse_irc_line(
                 '@account=Operator :ChangedNick!u@host PRIVMSG #marsh :' + command), 'Coin')
         wires = [wire for batch in fixture.wires[start:] for wire in batch]

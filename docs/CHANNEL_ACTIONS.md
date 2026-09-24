@@ -1,7 +1,7 @@
 # Bread and scheduled channel actions
 
 Each item-21 purchase costs 4 XP, grants +2 temporary karma and creates one
-independent bread effect for at most one hour. Owner `!pain` creates the same
+independent bread effect for at most one hour. Owner `!bread` creates the same
 effect without charging or creating a player. A maximum of 20 active pieces is
 accepted; a refused player purchase spends nothing.
 

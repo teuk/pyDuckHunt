@@ -486,7 +486,9 @@ class PartylineController:
     @staticmethod
     def _is_admin_channel_item_command(text: str) -> bool:
         arguments = text.split()
-        return bool(arguments) and arguments[0].casefold() in ("!appeau", tr('!pain'))
+        return bool(arguments) and arguments[0].casefold() in (
+            "!bread", "!duckcall", "!pain", "!appeau"
+        )
 
     @staticmethod
     def _is_duckplanning_command(text: str, *, private: bool) -> bool:
@@ -551,15 +553,16 @@ class PartylineController:
                 f"nick={_safe_atom(message.nickname)} command={_safe_atom(command)}"
             )
             return
+        item_id = 20 if command in ("!duckcall", "!appeau") else 21
+        canonical_command = "!duckcall" if item_id == 20 else "!bread"
         if len(arguments) != 1:
             self.runtime.emit_priority(
                 render_wire_notice(
                     message.nickname,
-                    (tr('{0} > Usage : {1}', owner.handle, command),),
+                    (tr('{0} > Usage : {1}', owner.handle, canonical_command),),
                 )
             )
             return
-        item_id = 20 if command == "!appeau" else 21
         scheduled_for_ns = self._integer_source(
             now_ns + 1,
             now_ns + (10 * MINUTE_NS if item_id == 20 else 60 * MINUTE_NS - 1),
@@ -623,7 +626,7 @@ class PartylineController:
             )
             return
         self._broadcast(
-            f"*** {owner.handle} used {command} on {channel} from IRC. ***"
+            f"*** {owner.handle} used {canonical_command} on {channel} from IRC. ***"
         )
         self._emit(
             "event=irc-admin-channel-item "

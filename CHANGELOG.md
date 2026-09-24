@@ -76,6 +76,14 @@ these changes do not create a stable release or a tag.
 - Bind Owner permissions to the IRC account or registered ident@host rather
   than the current nickname. Owner bread and call replies, including refusals,
   stay private. Player replies expose no exact future flight time.
+- Name the Owner's free channel commands `!bread` and `!duckcall` in both
+  languages. Keep `!pain` and `!appeau` as accepted aliases; map every form to
+  the existing items 21 and 20 without changing their schedule or cost.
+- Show each hunter's ducks hit and golden ducks alongside available XP in IRC
+  `!duckrank`; split longer rankings at whole entries so no hunter disappears
+  at the IRC wire limit.
+- Keep the active bread count and one-flight rule in `!inventory` while removing
+  the first-expiration countdown from the player notice.
 - Add Owner-only channel/PM duckplanning NOTICE views and partyline
   `.duckplanning`, listing the 24 slots, separate bread attractions, pending
   actions, active flight and expirations in Europe/Paris. Use “processed slots”

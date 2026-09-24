@@ -185,6 +185,30 @@ class IRCGameBridgeTests(unittest.TestCase):
         assert result.dispatch.persistence_ticket is not None
         result.dispatch.persistence_ticket.wait(2)
 
+    def test_twenty_ranked_hunters_are_not_dropped_by_response_line_cap(self) -> None:
+        self.runtime.close(2)
+        players = tuple(
+            PlayerState(f"hunter{index:02}", f"Hunter{index:02}", level=2,
+                        hits=index, golden_hits=index // 5, experience=21 - index)
+            for index in range(1, 21)
+        )
+        self.snapshots.write(Snapshot(0, GENESIS_DIGEST, GameState(players=players)))
+        self.runtime, _ = RuntimeOrchestrator.open(
+            self.journal, self.snapshots, self.batches.append,
+            persistence_capacity=2, snapshot_interval=None,
+        )
+        bridge = IRCGameBridge(
+            self.runtime, ("#pond",), resolved_event,
+            ranking_url="https://io.teuk.org/DuckHunt/rankings",
+        )
+        result = bridge.handle(1, self.message("!duckrank 20"))
+        text = b" ".join(result.priority_batch).decode("utf-8")
+        for index in range(1, 21):
+            self.assertEqual(text.count(f"Hunter{index:02}"), 1)
+        self.assertIn("Classement complet", text)
+        self.assertGreater(len(result.priority_batch), 4)
+        self.assertTrue(all(len(wire) <= 512 for wire in result.priority_batch))
+
     def test_player_shop_twenty_and_twenty_one_reach_their_runtime_effects(self) -> None:
         self.runtime.close(2)
         initial = GameState(players=(PlayerState("hunter", "Hunter", level=30, experience=300),))

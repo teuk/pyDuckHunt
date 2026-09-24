@@ -82,7 +82,9 @@ remaining deadline.
 
 `!duckrank` defaults to five hunters while retaining the explicit 1–20
 boundary. Its first public line uses a compact colored podium with medals for
-the leading three places. Identities configured in
+the leading three places. Each entry shows available XP, ducks hit and the
+number of golden ducks within that total. Longer rankings continue on
+additional bounded IRC lines without dropping a hunter. Identities configured in
 `statistics_excluded_nicknames` are omitted before ordering and limiting, so
 an operator never displaces a hunter. Direct `!duckstats` lookup returns the
 same unknown-hunter response for an excluded identity, and the partyline
@@ -152,8 +154,8 @@ one-third formula. The displayed value is the current bonus, not a random
 roll. Profile and inventory use the same live formula; a subsequent level
 change updates it without restoring any uses. Zero is displayed as +0.
 
-Bread inventory includes the relative time until the first remaining stack
-expires and states that one piece applies to one flight. No player-facing exact
+Bread inventory shows the active count and states that one piece applies to one
+flight, without a countdown to the first expiration. No player-facing exact
 attraction or daily-flight deadline is disclosed. Owner planning shows separate
 attraction and expiry times privately and never promises absent bread.
 Consuming a piece is bookkeeping-only and emits no additional channel line; the

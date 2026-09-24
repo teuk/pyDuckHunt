@@ -755,6 +755,9 @@ class ResponseRenderingTests(unittest.TestCase):
         self.assertLess(line.index("Aaron"), line.index("Bob"))
         self.assertIn("· 25 xp", line)
         self.assertEqual(line.count(" xp"), 3)
+        self.assertIn("Alice\x0f \x0303· 25 xp\x0f · 12 canards (dont 2 super-canards)", line)
+        self.assertIn("Aaron", line)
+        self.assertIn("20 canards (dont 0 super-canards)", line)
         self.assertIn("\x0307[TOP 3]\x0f", line)
         self.assertIn("🥇", line)
         self.assertIn("🥈", line)
@@ -779,6 +782,40 @@ class ResponseRenderingTests(unittest.TestCase):
             "\x0312[Classement complet]\x0f "
             "https://io.teuk.org/DuckHunt/rankings",
         )
+
+    def test_ranking_twenty_keeps_every_hunter_and_the_page_within_irc_lines(self) -> None:
+        players = tuple(
+            player(f"Hunter{index:02}", hits=index, golden_hits=index // 5, level=2,
+                   experience=21 - index)
+            for index in range(1, 21)
+        )
+        lines = render_ranking(
+            GameState(players=players),
+            limit=20,
+            ranking_url="https://io.teuk.org/DuckHunt/rankings",
+            channel="#pond",
+        )
+        self.assertGreater(len(lines), 2)
+        self.assertEqual(lines[-1], "\x0312[Classement complet]\x0f https://io.teuk.org/DuckHunt/rankings")
+        rank_text = " ".join(lines[:-1])
+        for index in range(1, 21):
+            self.assertEqual(rank_text.count(f"Hunter{index:02}"), 1)
+            ducks = "canard" if index == 1 else "canards"
+            golden = "super-canard" if index // 5 == 1 else "super-canards"
+            self.assertIn(f"{index} {ducks} (dont {index // 5} {golden})", rank_text)
+        for line in lines:
+            wire, = render_wire_response("#pond", (line,))
+            self.assertLessEqual(len(wire), MAX_WIRE_BYTES)
+            self.assertNotIn("…".encode(), wire)
+
+    def test_ranking_english_shows_golden_ducks_in_each_entry(self) -> None:
+        line = render_ranking(self.state, limit=2, language="en")[0]
+        self.assertIn("12 ducks (including 2 golden ducks)", line)
+        self.assertIn("20 ducks (including 0 golden ducks)", line)
+        lone = GameState(players=(player("Solo", hits=1, golden_hits=1),))
+        self.assertIn("1 canard (dont 1 super-canard)", render_ranking(lone)[0])
+        self.assertIn("1 duck (including 1 golden duck)",
+                      render_ranking(lone, language="en")[0])
 
     def test_empty_ranking_is_explicit(self) -> None:
         self.assertIn("Aucun", render_ranking(GameState())[0])

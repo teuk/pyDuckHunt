@@ -460,6 +460,8 @@ def _render_transition(
         else ()
     )
     lines = visible + query_lines
+    if context.command.kind is CommandKind.RANK:
+        return lines
     if len(lines) <= MAX_RESPONSE_LINES:
         return lines
     retained = lines[: MAX_RESPONSE_LINES - 1]

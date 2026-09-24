@@ -16,8 +16,10 @@ operator-controlled publication route:
 ranking_url = "https://games.example/DuckHunt/rankings"
 ```
 
-When present, `!duckrank` shows its colored top five and then this complete
-page on a separate public line. When absent, the command remains link-free.
+When present, `!duckrank` shows its colored XP ranking with each player's ducks
+hit and golden ducks, then this complete page on a separate public line. The
+default is top five; longer requested rankings may span multiple bounded IRC
+lines. When absent, the command remains link-free.
 
 Non-playing operators may be excluded consistently from every statistical
 projection without deleting their durable history:

@@ -32,7 +32,8 @@ stay English in both modes. Dates in Owner planning remain explicitly labelled
 Europe/Paris: changing language does not change a deadline or time zone.
 
 Command names remain compatible: `!bang`, `!shop`, `!duckstats`, `!inventory`,
-`!duckplanning`, Owner `!pain`/`!appeau`, and `.duckplanning` do not change.
+`!duckplanning`, Owner `!bread`/`!duckcall`, and `.duckplanning` are the same
+in both languages. Legacy `!pain`/`!appeau` remain accepted quietly.
 Nicknames, channel names, URLs, user chat and custom announcement text are never
 machine-translated. The standard spontaneous announcement has an English
 counterpart; operators should write other custom announcements in their chosen

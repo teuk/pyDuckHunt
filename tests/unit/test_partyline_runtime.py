@@ -586,7 +586,7 @@ class PartylineRuntimeTests(unittest.TestCase):
     def test_owner_channel_items_are_free_replayable_and_admin_only(self) -> None:
         self._bootstrap_over_offered_dcc("owner channel item password")
         spoof = parse_irc_line(
-            "@account=Other :Op[e]rator!user@trusted.example PRIVMSG #marsh :!pain"
+            "@account=Other :Op[e]rator!user@trusted.example PRIVMSG #marsh :!bread"
         )
         before_wires = len(self.wires)
         self.assertTrue(self.controller.handle_irc(20, spoof, "Coin"))
@@ -594,7 +594,7 @@ class PartylineRuntimeTests(unittest.TestCase):
         self.assertEqual(len(self.wires), before_wires)
 
         pain = parse_irc_line(
-            "@account=Operator :ChangedNick!elsewhere@changed PRIVMSG #marsh :!pain"
+            "@account=Operator :ChangedNick!elsewhere@changed PRIVMSG #marsh :!bread"
         )
         self.assertTrue(self.controller.handle_irc(21, pain, "Coin"))
         self.assertEqual(len(self.runtime.state.players), 1)
@@ -608,7 +608,7 @@ class PartylineRuntimeTests(unittest.TestCase):
         self.assertIn(b"planning quotidien reste", self.wires[-1][0])
 
         appeau = parse_irc_line(
-            "@account=Operator :AnotherNick!elsewhere@changed PRIVMSG #marsh :!appeau"
+            "@account=Operator :AnotherNick!elsewhere@changed PRIVMSG #marsh :!duckcall"
         )
         self.assertTrue(self.controller.handle_irc(22, appeau, "Coin"))
         self.assertEqual(len(self.runtime.state.players), 1)
@@ -622,10 +622,10 @@ class PartylineRuntimeTests(unittest.TestCase):
         self.assertIn(b"prochain envol quotidien ne change pas", self.wires[-1][0])
 
         malformed = parse_irc_line(
-            "@account=Operator :Op[e]rator!elsewhere@changed PRIVMSG #marsh :!pain extra"
+            "@account=Operator :Op[e]rator!elsewhere@changed PRIVMSG #marsh :!bread extra"
         )
         self.assertTrue(self.controller.handle_irc(23, malformed, "Coin"))
-        self.assertIn(b"Usage : !pain", self.wires[-1][0])
+        self.assertIn(b"Usage : !bread", self.wires[-1][0])
         self.assertTrue(all(wire.startswith(b"NOTICE Op[e]rator :") for wire in self.wires[-1]))
         self.assertTrue(all(
             wire.startswith(b"NOTICE ")
@@ -637,10 +637,37 @@ class PartylineRuntimeTests(unittest.TestCase):
             [EventKind.ADMIN_CHANNEL_ITEM, EventKind.ADMIN_CHANNEL_ITEM],
         )
 
+    def test_legacy_owner_item_aliases_keep_the_same_items_and_canonical_usage(self) -> None:
+        self._bootstrap_over_offered_dcc("owner legacy item alias password")
+        for now, command, item_id in ((20, "!pain", 21), (21, "!appeau", 20)):
+            with self.subTest(command=command):
+                message = parse_irc_line(
+                    "@account=Operator :ChangedNick!elsewhere@changed "
+                    f"PRIVMSG #marsh :{command}"
+                )
+                self.assertTrue(self.controller.handle_irc(now, message, "Coin"))
+                self.assertTrue(self.wires[-1][0].startswith(b"NOTICE ChangedNick :"))
+                if item_id == 21:
+                    self.assertEqual(self.runtime.state.effects[-1].item_id, 21)
+                else:
+                    self.assertEqual(self.runtime.state.scheduled_actions[-1].item_id, 20)
+                bad = parse_irc_line(
+                    "@account=Operator :ChangedNick!elsewhere@changed "
+                    f"PRIVMSG #marsh :{command} extra"
+                )
+                self.assertTrue(self.controller.handle_irc(now + 1, bad, "Coin"))
+                canonical = b"!bread" if item_id == 21 else b"!duckcall"
+                self.assertIn(b"Usage : " + canonical, self.wires[-1][0])
+        self.runtime.persistence.flush(2)
+        self.assertEqual(
+            [record.event.kind for record in self.journal.read_records()],
+            [EventKind.ADMIN_CHANNEL_ITEM] * 2,
+        )
+
     def test_owner_item_rejections_remain_private_without_mutating_state(self) -> None:
         self._bootstrap_over_offered_dcc("private rejection password")
         original = self.runtime.state
-        for command in ("!pain", "!appeau"):
+        for command in ("!bread", "!duckcall"):
             message = parse_irc_line(
                 "@account=Operator :ChangedNick!elsewhere@changed "
                 f"PRIVMSG #marsh :{command}"
@@ -669,7 +696,7 @@ class PartylineRuntimeTests(unittest.TestCase):
         self.runtime.dispatch(ReplayEvent.enable_hourly_bread(self.runtime.state.now_ns), lambda t: ())
         dcc = self._bootstrap_over_offered_dcc("hourly owner bread password")
         message = parse_irc_line(
-            "@account=Operator :ChangedNick!elsewhere@changed PRIVMSG #marsh :!pain")
+            "@account=Operator :ChangedNick!elsewhere@changed PRIVMSG #marsh :!bread")
         before = len(self.wires)
         self.controller.handle_irc(20, message, "Coin")
         replies = tuple(wire for batch in self.wires[before:] for wire in batch)

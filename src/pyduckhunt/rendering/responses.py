@@ -934,10 +934,6 @@ def render_inventory(
     if bread_count:
         bread_label = tr('morceau') if bread_count == 1 else tr('morceaux')
         channel_label = tr('le canal') if channel is None else channel
-        expirations = [effect.expires_at_ns for effect in breads
-                       if effect.expires_at_ns is not None]
-        expiry = ("" if not expirations else
-                  tr(' (première expiration dans {0})', format_duration_ns(min(expirations) - state.now_ns)))
         effect_hint = (
             tr(' ; un morceau par envol, +20s pour ce canard')
             if state.bread_policy_version >= 2
@@ -946,7 +942,7 @@ def render_inventory(
             else ""
         )
         inventory_parts.append(
-            tr('{0} {1} de pain sur {2}{3}{4}', bread_count, bread_label, channel_label, expiry, effect_hint)
+            tr('{0} {1} de pain sur {2}{3}', bread_count, bread_label, channel_label, effect_hint)
         )
     if curses:
         inventory_parts.append(tr('malédiction: {0}', ', '.join(curses)))
@@ -998,8 +994,9 @@ def render_ranking(
     limit: int = 5,
     ranking_url: str | None = None,
     excluded_nicknames: tuple[str, ...] = (),
+    channel: str | None = None,
 ) -> tuple[str, ...]:
-    """Render one compact podium and its optional complete public page."""
+    """Render complete ranked entries on bounded IRC lines and an optional link."""
 
     if type(limit) is not int or not 1 <= limit <= 20:
         raise ValueError("ranking limit must be between one and twenty")
@@ -1013,13 +1010,29 @@ def render_ranking(
         lines = (tr('{0}[TOP {1}]{2} Aucun chasseur classé.', _COLOR_ORANGE, limit, _RESET),)
     else:
         medals = ("🥇", "🥈", "🥉")
-        entries = "  •  ".join(
-            f"{medals[index - 1] if index <= len(medals) else f'{index}.'} "
-            f"{_BOLD}{player.nickname}{_RESET} "
-            f"{_COLOR_GREEN}· {available_experience(player)} xp{_RESET}"
-            for index, player in enumerate(ordered, start=1)
-        )
-        lines = (f"{_COLOR_ORANGE}[TOP {limit}]{_RESET}  {entries}",)
+        entries: list[str] = []
+        for index, player in enumerate(ordered, start=1):
+            ducks = tr('canard' if player.hits == 1 else 'canards')
+            golden = tr('super-canard' if player.golden_hits == 1 else 'super-canards')
+            kills = tr('· {0} {1} (dont {2} {3})', player.hits, ducks, player.golden_hits, golden)
+            medal = medals[index - 1] if index <= len(medals) else f'{index}.'
+            entries.append(
+                f"{medal} {_BOLD}{player.nickname}{_RESET} "
+                f"{_COLOR_GREEN}· {available_experience(player)} xp{_RESET} {kills}"
+            )
+        prefix = f"{_COLOR_ORANGE}[TOP {limit}]{_RESET}  "
+        budget = min(420, privmsg_text_budget(channel)) if channel is not None else 420
+        rank_lines: list[str] = []
+        current = prefix
+        for entry in entries:
+            candidate = current + ("  •  " if current != prefix else "") + entry
+            if current != prefix and len(candidate.encode("utf-8")) > budget:
+                rank_lines.append(current)
+                current = prefix + entry
+            else:
+                current = candidate
+        rank_lines.append(current)
+        lines = tuple(rank_lines)
     if normalized_url is not None:
         lines += (
             tr('{0}[Classement complet]{1} {2}', _COLOR_BLUE, _RESET, normalized_url),
@@ -1122,6 +1135,7 @@ def render_query(
             limit=rank_limit(command),
             ranking_url=ranking_url,
             excluded_nicknames=statistics_excluded_nicknames,
+            channel=channel,
         )
     raise ValueError(f"{command_usage(command)} is not a read-only query")
 

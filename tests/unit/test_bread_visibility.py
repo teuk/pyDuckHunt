@@ -82,7 +82,7 @@ class BreadVisibilityTests(unittest.TestCase):
         state = replace(remaining_bread(), now_ns=at('11:43:20'))
         text = ' '.join(render_inventory(state, 'Hunter', channel='#marsh'))
         self.assertIn('1 morceau de pain', text)
-        self.assertIn('première expiration dans 2s', text)
+        self.assertNotIn('première expiration', text)
         self.assertIn('un morceau par envol', text)
         self.assertNotIn('12:18', text)
         after = ' '.join(render_inventory(advance_time(state, at('11:43:22')).state, 'Hunter'))

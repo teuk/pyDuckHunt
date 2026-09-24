@@ -188,8 +188,8 @@ currently joined to:
 ```text
 !rearm <nick>
 !unarm [-permanent] <nick>
-!pain
-!appeau
+!bread
+!duckcall
 !duckplanning
 ```
 
@@ -214,8 +214,10 @@ carry the owner handle in an `admin_weapon_control` journal event, broadcast to
 the partyline and acknowledge the result in the IRC channel or by private
 NOTICE, matching the command scope.
 
-`!pain` adds one stack of the same one-hour channel bread as `!shop 21`.
-`!appeau` schedules the same within-ten-minutes duck call as `!shop 20`.
+`!bread` adds one stack of the same one-hour channel bread as `!shop 21`.
+`!duckcall` schedules the same within-ten-minutes duck call as `!shop 20`.
+The old `!pain` and `!appeau` commands remain accepted as quiet aliases;
+usage notices show the English names.
 Neither command charges XP or creates a player profile. Bread receives one
 separate attraction deadline and never changes the 24-slot daily plan; a duck
 call keeps its own scheduled deadline. Each accepted action is attributed to the authenticated owner in an
@@ -286,5 +288,5 @@ and DCC sockets before persistence is drained.
 upcoming scheduling slots, not as a retrospective count of actual launches.
 Bread attractions and expirations appear on separate lines; expiry alone is not
 presented as an effective wake-up. Addition, consumption and expiration refresh
-the private partyline plan. Owner `!pain` explains its attraction, one-flight
+the private partyline plan. Owner `!bread` explains its attraction, one-flight
 consumption and 20-second extension in private NOTICE only.
