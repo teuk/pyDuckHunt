@@ -5,6 +5,14 @@ these changes do not create a stable release or a tag.
 
 ## 0.2.0-dev — Unreleased
 
+- Add opt-in `!duckrank hits [limit]` using the existing ducks-hit order.
+  Keep the current XP default and link, add private `!myrank` for both
+  positions and a private bilingual `!duckhelp`; neither private query creates
+  a player or a journal event.
+- Keep every `!inventory` entry visible in private IRC NOTICE replies by
+  continuing long inventories at whole-item boundaries within the 512-byte
+  wire budget; retain the compact response for ordinary inventories.
+
 ### Development line
 
 - Advance the public beta development line from 0.1.0-dev to 0.2.0-dev for

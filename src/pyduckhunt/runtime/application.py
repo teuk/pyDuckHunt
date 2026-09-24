@@ -267,6 +267,20 @@ class IRCGameBridge:
                 dispatch=identity_backpressure,
                 priority_batch=identity_backpressure.priority_batch,
             )
+        if command.kind in (CommandKind.MY_RANK, CommandKind.HELP):
+            lines = render_query(
+                self.runtime.state,
+                nickname,
+                command,
+                statistics_excluded_nicknames=self._statistics_excluded_nicknames,
+            )
+            batch = _render_command_response(command, nickname, channel, lines)
+            self.runtime.emit_priority(batch)
+            return BridgeResult(
+                BridgeStatus.DISPATCHED,
+                command=command,
+                priority_batch=batch,
+            )
         try:
             event = self._event_resolver(self.runtime.state, context)
         except EventResolutionError as error:
@@ -414,10 +428,18 @@ def _render_command_response(
     channel: str,
     lines: tuple[str, ...],
 ) -> tuple[bytes, ...]:
-    private_query = command.kind in (CommandKind.STATS, CommandKind.INVENTORY) or (
+    private_query = command.kind in (
+        CommandKind.STATS, CommandKind.INVENTORY, CommandKind.MY_RANK, CommandKind.HELP,
+    ) or (
         command.kind is CommandKind.SHOP and not command.arguments
     )
     if private_query:
+        if command.kind is CommandKind.INVENTORY and len(lines) > MAX_RESPONSE_LINES:
+            return tuple(
+                wire
+                for line in lines
+                for wire in render_wire_notice(nickname, (line,))
+            )
         return render_wire_notice(nickname, lines)
     if command.kind in (CommandKind.SHOT, CommandKind.RANK) and len(lines) > 1:
         return tuple(
@@ -460,7 +482,7 @@ def _render_transition(
         else ()
     )
     lines = visible + query_lines
-    if context.command.kind is CommandKind.RANK:
+    if context.command.kind in (CommandKind.RANK, CommandKind.INVENTORY):
         return lines
     if len(lines) <= MAX_RESPONSE_LINES:
         return lines

@@ -86,6 +86,30 @@ class CommandParserTests(unittest.TestCase):
         self.assertEqual(rank_limit(default_command), 5)
         self.assertEqual(rank_limit(boundary_command), 20)
 
+    def test_opt_in_hits_ranking_preserves_the_numeric_default(self) -> None:
+        for text, expected in (("!duckrank hits", 5), ("!duckrank HITS 20", 20)):
+            command = parse_command(text)
+            assert command is not None
+            self.assertEqual(rank_limit(command), expected)
+        for text in ("!duckrank hits 0", "!duckrank hits 21", "!duckrank hits all",
+                     "!duckrank hits 2 extra", "!duckrank 3 hits"):
+            command = parse_command(text)
+            assert command is not None
+            with self.assertRaises(CommandSyntaxError):
+                validate_command(command)
+
+    def test_personal_rank_and_private_help_take_no_arguments(self) -> None:
+        for text, kind in (("!myrank", CommandKind.MY_RANK),
+                           ("!duckhelp", CommandKind.HELP)):
+            command = parse_command(text)
+            assert command is not None
+            self.assertIs(command.kind, kind)
+            self.assertIs(validate_command(command), command)
+            extra = parse_command(text + " Hunter")
+            assert extra is not None
+            with self.assertRaises(CommandSyntaxError):
+                validate_command(extra)
+
     def test_rank_limit_rejects_invalid_values(self) -> None:
         for text in ("!duckrank 0", "!duckrank 21", "!duckrank all", "!duckrank 1 2"):
             command = parse_command(text)

@@ -34,8 +34,11 @@ The public parser recognizes these calibrated forms:
 - `!duckstats [nickname]`
 - `!lastduck`
 - `!duckrank [limit]`
+- `!duckrank hits [limit]`
+- `!myrank`
+- `!duckhelp`
 
-Profile, inventory and catalog queries are returned privately to the requester
+Profile, inventory, personal rank, help and catalog queries are returned privately to the requester
 as IRC `NOTICE` messages. Ranking and game activity remain visible in the
 channel. The shop query is one bounded NOTICE containing the compact purchase
 syntax and, only when configured, the operator-controlled HTTPS catalog URL;
@@ -60,6 +63,9 @@ remaining lifetime. Every other time-bounded player effect follows the same
 rule; use-bounded equipment reports its remaining uses and permanent equipment
 does not invent an expiry. Promotion coupons show their percentage once and
 their actual remaining lifetime once. Curses are appended only when present.
+When this section grows beyond one IRC line, inventory items continue on
+additional private NOTICE lines at whole-item boundaries. The recipient's
+512-byte wire budget is checked before sending, so later items stay visible.
 The same compact inventory response includes the daily duck bag, its carry
 state, the `DUCK HUNT` slots and an active TARDIS marker. Crossing the six- or
 eleven-duck boundary adds a short carry tag to the existing hit line. Completing
@@ -80,8 +86,10 @@ distinct labels and trail, while a noise escape uses its own frightened trail.
 The active `!lastduck` response reports elapsed presence without publishing the
 remaining deadline.
 
-`!duckrank` defaults to five hunters while retaining the explicit 1–20
-boundary. Its first public line uses a compact colored podium with medals for
+`!duckrank` defaults to five hunters by available XP while retaining the explicit
+1–20 boundary. `!duckrank hits [limit]` opts into the existing ducks-hit order
+used by the ranking page; the XP form and its order do not change. The selected
+view appears in the heading. The first public line uses a compact colored podium with medals for
 the leading three places. Each entry shows available XP, ducks hit and the
 number of golden ducks within that total. Longer rankings continue on
 additional bounded IRC lines without dropping a hunter. Identities configured in
@@ -91,7 +99,12 @@ same unknown-hunter response for an excluded identity, and the partyline
 summary omits it even when it is the last shooter. When `ranking_url` is
 configured, a second public line links to the complete ranking page. The two
 semantic lines are deliberately kept separate instead of being packed
-together. A shop identifier must be a positive ASCII integer; whether the item
+together. `!myrank` privately reports the requester's position in both
+existing ranking orders, including the total ranked players and their current
+XP and duck counts. Excluded or unknown nicknames receive the same unknown-hunter
+reply as `!duckstats`. `!duckhelp` privately lists player commands in the
+instance language. Neither command registers a new hunter or writes a query
+event. A shop identifier must be a positive ASCII integer; whether the item
 exists or requires a target remains a game-engine decision so it can produce a
 precise player outcome.
 

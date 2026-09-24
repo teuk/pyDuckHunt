@@ -26,7 +26,9 @@ EN = {
     ' sur {0}': ' on {0}',
     ' {0}{1} pts {2}': ' {0}{1} pts {2}',
     '!bang': '!bang',
-    '!duckrank [limite]': '!duckrank [limit]',
+    '!duckrank [limite] ou !duckrank hits [limite]': '!duckrank [limit] or !duckrank hits [limit]',
+    '!duckhelp': '!duckhelp',
+    '!myrank': '!myrank',
     '!duckstats [nick]': '!duckstats [nick]',
     '!inventory [nick]': '!inventory [nick]',
     '!lastduck': '!lastduck',
@@ -849,6 +851,12 @@ EN = {
     '{0}[CANARD MÉCANIQUE]{1} ': '{0}[MECHANICAL DUCK]{1} ',
     '{0}[CANARD MÉCANIQUE]{1} {2}\\_O<{3}   CLIC': '{0}[MECHANICAL DUCK]{1} {2}\\_O<{3}   CLICK',
     '{0}[Classement complet]{1} {2}': '{0}[Full rankings]{1} {2}',
+    '{0}[TOP {1} CANARDS]{2}': '{0}[TOP {1} DUCKS]{2}',
+    '{0}[TOP {1} CANARDS]{2} Aucun chasseur classé.': '{0}[TOP {1} DUCKS]{2} No ranked hunters.',
+    '{0}[Mon rang]{1} {2} | XP disponibles : {3}/{4} ({5} xp) | canards : {6}/{4} ({7}, dont {8} {9})': '{0}[My rank]{1} {2} | Available XP: {3}/{4} ({5} xp) | Ducks: {6}/{4} ({7}, including {8} {9})',
+    '{0}[Aide DuckHunt]{1} !bang / !pan : tirer | !reload : recharger | !shop : catalogue, !shop <id> [cible] : acheter': '{0}[DuckHunt help]{1} !bang / !pan: shoot | !reload: reload | !shop: catalog, !shop <id> [target]: buy',
+    '!duckstats [nick] : profil | !inventory [nick] : équipement | !lastduck : dernier vol': '!duckstats [nick]: profile | !inventory [nick]: gear | !lastduck: last flight',
+    '!duckrank [limite] : XP | !duckrank hits [limite] : canards | !myrank : mon rang | !duckhelp : cette aide': '!duckrank [limit]: XP | !duckrank hits [limit]: ducks | !myrank: my rank | !duckhelp: this help',
     '{0}[Inventaire]{1} arme: {2}{3} | mun.: {4}/{5} | charg.: {6} | {7} {8} {9}{10} | lettres: {11}': '{0}[Inventory]{1} weapon: {2}{3} | ammo: {4}/{5} | clips: {6} | {7} {8} {9}{10} | letters: {11}',
     (
         '{0}[Profil]{1} {2} xp | niv. {3} ({4}) +{5} xp = niv. sup. | fatigue: {6}{7} | karma: '

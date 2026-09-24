@@ -16,6 +16,8 @@ class CommandKind(str, Enum):
     STATS = "stats"
     LAST_FLIGHT = "last_flight"
     RANK = "rank"
+    MY_RANK = "my_rank"
+    HELP = "help"
 
 
 _ALIASES = {
@@ -27,6 +29,8 @@ _ALIASES = {
     "duckstats": CommandKind.STATS,
     "lastduck": CommandKind.LAST_FLIGHT,
     "duckrank": CommandKind.RANK,
+    "myrank": CommandKind.MY_RANK,
+    "duckhelp": CommandKind.HELP,
 }
 
 
@@ -48,7 +52,9 @@ _USAGE = {
     CommandKind.INVENTORY: "!inventory [nick]",
     CommandKind.STATS: "!duckstats [nick]",
     CommandKind.LAST_FLIGHT: "!lastduck",
-    CommandKind.RANK: "!duckrank [limite]",
+    CommandKind.RANK: "!duckrank [limite] ou !duckrank hits [limite]",
+    CommandKind.MY_RANK: "!myrank",
+    CommandKind.HELP: "!duckhelp",
 }
 
 
@@ -67,7 +73,10 @@ def validate_command(command: Command, *, maximum_rank_limit: int = 20) -> Comma
         raise ValueError("maximum rank limit must be a positive integer")
 
     arguments = command.arguments
-    if command.kind in (CommandKind.SHOT, CommandKind.RELOAD, CommandKind.LAST_FLIGHT):
+    if command.kind in (
+        CommandKind.SHOT, CommandKind.RELOAD, CommandKind.LAST_FLIGHT,
+        CommandKind.MY_RANK, CommandKind.HELP,
+    ):
         valid = not arguments
     elif command.kind in (CommandKind.INVENTORY, CommandKind.STATS):
         valid = len(arguments) <= 1
@@ -77,10 +86,11 @@ def validate_command(command: Command, *, maximum_rank_limit: int = 20) -> Comma
             valid = valid and arguments[0].isascii() and arguments[0].isdigit()
             valid = valid and int(arguments[0]) > 0
     elif command.kind is CommandKind.RANK:
-        valid = len(arguments) <= 1
-        if arguments:
-            valid = valid and arguments[0].isascii() and arguments[0].isdigit()
-            valid = valid and 1 <= int(arguments[0]) <= maximum_rank_limit
+        rank_arguments = arguments[1:] if arguments and arguments[0].casefold() == "hits" else arguments
+        valid = len(rank_arguments) <= 1
+        if rank_arguments:
+            valid = valid and rank_arguments[0].isascii() and rank_arguments[0].isdigit()
+            valid = valid and 1 <= int(rank_arguments[0]) <= maximum_rank_limit
     else:  # pragma: no cover - the enum makes this defensive branch unreachable.
         valid = False
 
@@ -97,7 +107,10 @@ def rank_limit(command: Command, *, default: int = 5, maximum: int = 20) -> int:
     if type(default) is not int or not 1 <= default <= maximum:
         raise ValueError("default rank limit must be inside the public boundary")
     validate_command(command, maximum_rank_limit=maximum)
-    return default if not command.arguments else int(command.arguments[0])
+    arguments = command.arguments
+    if arguments and arguments[0].casefold() == "hits":
+        arguments = arguments[1:]
+    return default if not arguments else int(arguments[0])
 
 
 def parse_command(text: str, *, prefix: str = "!") -> Command | None:

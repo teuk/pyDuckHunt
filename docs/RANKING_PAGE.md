@@ -16,8 +16,10 @@ operator-controlled publication route:
 ranking_url = "https://games.example/DuckHunt/rankings"
 ```
 
-When present, `!duckrank` shows its colored XP ranking with each player's ducks
-hit and golden ducks, then this complete page on a separate public line. The
+When present, `!duckrank` shows its colored available-XP ranking with each
+player's ducks hit and golden ducks, then this complete page on a separate
+public line. `!duckrank hits [limit]` shows the page's existing ducks-hit order
+on IRC, with the same separate link and unchanged XP default. The
 default is top five; longer requested rankings may span multiple bounded IRC
 lines. When absent, the command remains link-free.
 

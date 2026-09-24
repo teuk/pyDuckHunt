@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from pyduckhunt.game.commands import CommandKind
-from pyduckhunt.game.model import GameState, PlayerState
+from pyduckhunt.game.model import GameState, InventoryStack, PlayerState
 from pyduckhunt.irc import parse_irc_line
 from pyduckhunt.persistence import JournalFile, ReplayEvent, SnapshotStore
 from pyduckhunt.persistence.snapshot import Snapshot
@@ -184,6 +184,77 @@ class IRCGameBridgeTests(unittest.TestCase):
         assert result.dispatch is not None
         assert result.dispatch.persistence_ticket is not None
         result.dispatch.persistence_ticket.wait(2)
+
+    def test_new_ranking_views_and_help_keep_privacy_and_state(self) -> None:
+        self.runtime.close(2)
+        players = (
+            PlayerState('alice', 'Alice', level=2, experience=5, hits=2, golden_hits=1),
+            PlayerState('bob', 'Bob', hits=4),
+        )
+        initial = GameState(players=players)
+        self.snapshots.write(Snapshot(0, GENESIS_DIGEST, initial))
+        self.runtime, _ = RuntimeOrchestrator.open(
+            self.journal, self.snapshots, self.batches.append,
+            persistence_capacity=2, snapshot_interval=None,
+        )
+        bridge = IRCGameBridge(self.runtime, ('#pond',), resolved_event, language='en')
+        for nickname, command, expected in (
+            ('Alice', '!myrank', b'[My rank]'),
+            ('Visitor', '!myrank', b'I do not know any hunter'),
+            ('Visitor', '!duckhelp', b'[DuckHunt help]'),
+        ):
+            with self.subTest(command=command, nickname=nickname):
+                result = bridge.handle(1, self.message(command, nickname=nickname))
+                self.assertEqual(result.status, BridgeStatus.DISPATCHED)
+                self.assertIsNone(result.dispatch)
+                self.assertTrue(result.priority_batch)
+                self.assertTrue(all(wire.startswith(b'NOTICE ' + nickname.encode() + b' :')
+                                    for wire in result.priority_batch))
+                self.assertTrue(all(len(wire) <= 512 and b'\xe2\x80\xa6' not in wire
+                                    for wire in result.priority_batch))
+                self.assertIn(expected, b' '.join(result.priority_batch))
+                self.assertEqual(self.runtime.state, initial)
+                self.assertEqual(self.journal.read_records(), ())
+        ranked = bridge.handle(2, self.message('!duckrank hits 2', nickname='Alice'))
+        self.assertTrue(all(wire.startswith(b'PRIVMSG #pond :') for wire in ranked.priority_batch))
+        body = b' '.join(ranked.priority_batch)
+        self.assertIn(b'[TOP 2 DUCKS]', body)
+        self.assertLess(body.index(b'Bob'), body.index(b'Alice'))
+        assert ranked.dispatch is not None
+        assert ranked.dispatch.persistence_ticket is not None
+        ranked.dispatch.persistence_ticket.wait(2)
+        self.assertEqual(self.journal.read_records()[0].event.arguments, ('hits', '2'))
+
+    def test_private_help_and_personal_rank_syntax_errors_do_not_hit_channel(self) -> None:
+        for command in ('!myrank Other', '!duckhelp now'):
+            with self.subTest(command=command):
+                result = self.bridge.handle(1, self.message(command))
+                self.assertEqual(result.status, BridgeStatus.INVALID)
+                self.assertEqual(len(result.priority_batch), 1)
+                self.assertTrue(result.priority_batch[0].startswith(b'NOTICE Hunter :'))
+                self.assertEqual(self.journal.read_records(), ())
+
+    def test_full_inventory_reaches_only_the_requester_across_many_notices(self) -> None:
+        self.runtime.close(2)
+        keys = tuple(f'item_{i:02}_' + 'x' * 36 for i in range(48))
+        collector = PlayerState(
+            'collector', 'Collector',
+            inventory=tuple(InventoryStack(key, 1) for key in keys),
+        )
+        self.snapshots.write(Snapshot(0, GENESIS_DIGEST, GameState(players=(collector,))))
+        self.runtime, _ = RuntimeOrchestrator.open(
+            self.journal, self.snapshots, self.batches.append,
+            persistence_capacity=2, snapshot_interval=None,
+        )
+        bridge = IRCGameBridge(self.runtime, ('#pond',), resolved_event)
+        result = bridge.handle(1, self.message('!inventory Collector', nickname='Hunter'))
+        self.assertGreater(len(result.priority_batch), 4)
+        self.assertTrue(all(wire.startswith(b'NOTICE Hunter :') for wire in result.priority_batch))
+        self.assertTrue(all(len(wire) <= 512 for wire in result.priority_batch))
+        body = b' '.join(result.priority_batch).decode('utf-8')
+        for key in keys:
+            self.assertEqual(body.count(key), 1)
+        self.assertNotIn('…', body)
 
     def test_twenty_ranked_hunters_are_not_dropped_by_response_line_cap(self) -> None:
         self.runtime.close(2)

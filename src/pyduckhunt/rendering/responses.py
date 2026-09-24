@@ -39,7 +39,7 @@ from pyduckhunt.game.model import (
     PlayerState,
 )
 from pyduckhunt.game.progression import available_experience, experience_required
-from pyduckhunt.game.ranking import is_statistically_excluded, ranked_players
+from pyduckhunt.game.ranking import RankingCriterion, is_statistically_excluded, ranked_players
 from pyduckhunt.game.rewards import (
     has_unlimited_duck_carry,
     has_unlimited_magazines,
@@ -882,8 +882,9 @@ def render_inventory(
     nickname: str,
     *,
     channel: str | None = None,
+    notice_target: str | None = None,
 ) -> tuple[str, ...]:
-    """Render canonical stacks and active effects without exposing state internals."""
+    """Render every inventory item on whole, recipient-bounded NOTICE lines."""
 
     if channel is not None and (
         type(channel) is not str
@@ -945,7 +946,7 @@ def render_inventory(
             tr('{0} {1} de pain sur {2}{3}', bread_count, bread_label, channel_label, effect_hint)
         )
     if curses:
-        inventory_parts.append(tr('malédiction: {0}', ', '.join(curses)))
+        inventory_parts.extend(tr('malédiction: {0}', curse) for curse in curses)
     weapon_state = (
         tr(' (confisquée définitivement)')
         if player.permanently_confiscated
@@ -972,9 +973,24 @@ def render_inventory(
     base = (
         tr('{0}[Inventaire]{1} arme: {2}{3} | mun.: {4}/{5} | charg.: {6} | {7} {8} {9}{10} | lettres: {11}', _COLOR_ORANGE, _RESET, weapon, weapon_state, player.ammo, player.capacity, magazine_status, carry_label, player.carried_ducks, duck_label, carry_status, _letter_status(player))
     )
+    budget = notice_text_budget(notice_target or nickname)
+    if len(base.encode('utf-8')) > budget:
+        raise IRCProtocolError('inventory header exceeds the NOTICE budget')
     if not inventory_parts:
         return (base,)
-    return (base, "| " + " | ".join(inventory_parts))
+    lines = [base]
+    current = ''
+    for part in inventory_parts:
+        candidate = f'{current} | {part}' if current else f'| {part}'
+        if current and len(candidate.encode('utf-8')) > budget:
+            lines.append(current)
+            current = f'| {part}'
+        else:
+            current = candidate
+        if len(current.encode('utf-8')) > budget:
+            raise IRCProtocolError('inventory item exceeds the NOTICE budget')
+    lines.append(current)
+    return tuple(lines)
 
 
 @localized
@@ -995,19 +1011,32 @@ def render_ranking(
     ranking_url: str | None = None,
     excluded_nicknames: tuple[str, ...] = (),
     channel: str | None = None,
+    criterion: RankingCriterion = RankingCriterion.EXPERIENCE,
 ) -> tuple[str, ...]:
     """Render complete ranked entries on bounded IRC lines and an optional link."""
 
     if type(limit) is not int or not 1 <= limit <= 20:
         raise ValueError("ranking limit must be between one and twenty")
+    if not isinstance(criterion, RankingCriterion):
+        raise ValueError("ranking criterion is unsupported")
     normalized_url = normalize_ranking_url(ranking_url)
     ordered = ranked_players(
         state,
         limit=limit,
         excluded_nicknames=excluded_nicknames,
+        criterion=criterion,
+    )
+    heading = (
+        f"{_COLOR_ORANGE}[TOP {limit}]{_RESET}"
+        if criterion is RankingCriterion.EXPERIENCE
+        else tr('{0}[TOP {1} CANARDS]{2}', _COLOR_ORANGE, limit, _RESET)
     )
     if not ordered:
-        lines = (tr('{0}[TOP {1}]{2} Aucun chasseur classé.', _COLOR_ORANGE, limit, _RESET),)
+        lines = (
+            tr('{0}[TOP {1}]{2} Aucun chasseur classé.', _COLOR_ORANGE, limit, _RESET),
+        ) if criterion is RankingCriterion.EXPERIENCE else (
+            tr('{0}[TOP {1} CANARDS]{2} Aucun chasseur classé.', _COLOR_ORANGE, limit, _RESET),
+        )
     else:
         medals = ("🥇", "🥈", "🥉")
         entries: list[str] = []
@@ -1020,7 +1049,7 @@ def render_ranking(
                 f"{medal} {_BOLD}{player.nickname}{_RESET} "
                 f"{_COLOR_GREEN}· {available_experience(player)} xp{_RESET} {kills}"
             )
-        prefix = f"{_COLOR_ORANGE}[TOP {limit}]{_RESET}  "
+        prefix = f"{heading}  "
         budget = min(420, privmsg_text_budget(channel)) if channel is not None else 420
         rank_lines: list[str] = []
         current = prefix
@@ -1038,6 +1067,47 @@ def render_ranking(
             tr('{0}[Classement complet]{1} {2}', _COLOR_BLUE, _RESET, normalized_url),
         )
     return lines
+
+
+@localized
+def render_personal_rank(
+    state: GameState,
+    nickname: str,
+    *,
+    excluded_nicknames: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    """Show a hunter's place in the two existing public ranking orders."""
+
+    if is_statistically_excluded(nickname, excluded_nicknames=excluded_nicknames):
+        return (tr('{0} > Je ne connais aucun chasseur portant ce nom.', nickname),)
+    player = _player(state, nickname)
+    if player is None:
+        return (tr('{0} > Je ne connais aucun chasseur portant ce nom.', nickname),)
+    ranked = ranked_players(state, excluded_nicknames=excluded_nicknames)
+    by_hits = ranked_players(
+        state, excluded_nicknames=excluded_nicknames, criterion=RankingCriterion.HITS,
+    )
+    xp_place = next(index for index, entry in enumerate(ranked, 1) if entry.key == player.key)
+    hits_place = next(index for index, entry in enumerate(by_hits, 1) if entry.key == player.key)
+    return (
+        tr(
+            '{0}[Mon rang]{1} {2} | XP disponibles : {3}/{4} ({5} xp) | canards : {6}/{4} ({7}, dont {8} {9})',
+            _COLOR_ORANGE, _RESET, player.nickname, xp_place, len(ranked),
+            available_experience(player), hits_place, player.hits, player.golden_hits,
+            tr('super-canard' if player.golden_hits == 1 else 'super-canards'),
+        ),
+    )
+
+
+@localized
+def render_help() -> tuple[str, ...]:
+    """Show a short private player command guide without reading game state."""
+
+    return (
+        tr('{0}[Aide DuckHunt]{1} !bang / !pan : tirer | !reload : recharger | !shop : catalogue, !shop <id> [cible] : acheter', _COLOR_ORANGE, _RESET),
+        tr('!duckstats [nick] : profil | !inventory [nick] : équipement | !lastduck : dernier vol'),
+        tr('!duckrank [limite] : XP | !duckrank hits [limite] : canards | !myrank : mon rang | !duckhelp : cette aide'),
+    )
 
 
 @localized
@@ -1118,6 +1188,7 @@ def render_query(
             state,
             command.arguments[0] if command.arguments else actor,
             channel=channel,
+            notice_target=actor,
         )
     if command.kind is CommandKind.SHOP and not command.arguments:
         return render_shop(shop_url)
@@ -1136,7 +1207,18 @@ def render_query(
             ranking_url=ranking_url,
             excluded_nicknames=statistics_excluded_nicknames,
             channel=channel,
+            criterion=(
+                RankingCriterion.HITS
+                if command.arguments and command.arguments[0].casefold() == 'hits'
+                else RankingCriterion.EXPERIENCE
+            ),
         )
+    if command.kind is CommandKind.MY_RANK:
+        return render_personal_rank(
+            state, actor, excluded_nicknames=statistics_excluded_nicknames,
+        )
+    if command.kind is CommandKind.HELP:
+        return render_help()
     raise ValueError(f"{command_usage(command)} is not a read-only query")
 
 

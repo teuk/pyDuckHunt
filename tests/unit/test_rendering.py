@@ -7,6 +7,7 @@ from pyduckhunt.game.commands import CommandSyntaxError, parse_command
 from pyduckhunt.game.model import (
     FlightState,
     ActiveEffect,
+    ActiveCurse,
     EffectScope,
     GameState,
     InventoryStack,
@@ -455,6 +456,37 @@ class ResponseRenderingTests(unittest.TestCase):
         )
         self.assertEqual(len(render_wire_notice("ReferenceHunter", lines)), 1)
 
+    def test_large_inventory_keeps_every_item_and_curse_on_whole_notice_lines(self) -> None:
+        recipient = 'CollectorWithALongNickname'
+        item_keys = tuple(f'item_{i:02}_' + 'x' * 36 for i in range(48))
+        curse_keys = tuple(f'curse_{i:02}' for i in range(12))
+        collector = player(
+            'Collector',
+            inventory=tuple(InventoryStack(key, 1) for key in item_keys),
+        )
+        state = GameState(
+            players=(collector,),
+            curses=tuple(
+                ActiveCurse(i + 1, key, collector.key, 0, 3_600_000_000_000)
+                for i, key in enumerate(curse_keys)
+            ),
+            next_curse_id=13,
+        )
+        for language in ('fr', 'en'):
+            with self.subTest(language=language):
+                lines = render_inventory(
+                    state, 'Collector', notice_target=recipient, language=language,
+                )
+                self.assertGreater(len(lines), MAX_RESPONSE_LINES)
+                self.assertTrue(all(line.startswith('| ') for line in lines[1:]))
+                combined = ' '.join(lines)
+                for key in (*item_keys, *curse_keys):
+                    self.assertEqual(combined.count(key), 1)
+                for line in lines:
+                    wire, = render_wire_notice(recipient, (line,))
+                    self.assertLessEqual(len(wire), MAX_WIRE_BYTES)
+                    self.assertNotIn('…'.encode(), wire)
+
     def test_inventory_reports_jammed_and_confiscated_weapon_states(self) -> None:
         jammed = GameState(players=(player("Jammed", jammed=True),))
         confiscated = GameState(players=(player("Gone", confiscated=True),))
@@ -816,6 +848,87 @@ class ResponseRenderingTests(unittest.TestCase):
         self.assertIn("1 canard (dont 1 super-canard)", render_ranking(lone)[0])
         self.assertIn("1 duck (including 1 golden duck)",
                       render_ranking(lone, language="en")[0])
+
+    def test_opt_in_hits_order_keeps_the_xp_default_and_bounded_page(self) -> None:
+        original = render_query(self.state, 'Alice', parse_command('!duckrank'))
+        command = parse_command('!duckrank hits 2')
+        assert command is not None
+        lines = render_query(
+            self.state, 'Alice', command,
+            ranking_url='https://games.example/DuckHunt/rankings', channel='#pond',
+        )
+        self.assertIn('[TOP 2 CANARDS]', lines[0])
+        self.assertLess(lines[0].index('Bob'), lines[0].index('Alice'))
+        self.assertIn('20 canards (dont 0 super-canards)', lines[0])
+        self.assertIn('https://games.example/DuckHunt/rankings', lines[-1])
+        self.assertLess(original[0].index('Alice'), original[0].index('Bob'))
+        for line in lines:
+            wire, = render_wire_response('#pond', (line,))
+            self.assertLessEqual(len(wire), MAX_WIRE_BYTES)
+            self.assertNotIn('…'.encode(), wire)
+        english = render_query(self.state, 'Alice', command, language='en')[0]
+        self.assertIn('[TOP 2 DUCKS]', english)
+        self.assertIn('20 ducks (including 0 golden ducks)', english)
+
+    def test_hits_ranking_twenty_keeps_every_hunter_and_excludes_operators(self) -> None:
+        players = tuple(
+            player(f'Hunter{index:02}', hits=index, golden_hits=index // 5)
+            for index in range(1, 21)
+        )
+        command = parse_command('!duckrank hits 20')
+        assert command is not None
+        lines = render_query(
+            GameState(players=players), 'Hunter01', command,
+            statistics_excluded_nicknames=('Hunter20',), channel='#pond',
+        )
+        payload = ' '.join(lines)
+        self.assertNotIn('Hunter20', payload)
+        self.assertLess(payload.index('Hunter19'), payload.index('Hunter18'))
+        for index in range(1, 20):
+            self.assertEqual(payload.count(f'Hunter{index:02}'), 1)
+        for line in lines:
+            wire, = render_wire_response('#pond', (line,))
+            self.assertLessEqual(len(wire), MAX_WIRE_BYTES)
+            self.assertNotIn('…'.encode(), wire)
+
+    def test_personal_rank_uses_both_stable_orders_and_exclusions(self) -> None:
+        command = parse_command('!myrank')
+        assert command is not None
+        rendered = render_query(self.state, 'Alice', command)[0]
+        self.assertIn('XP disponibles : 1/2 (25 xp)', rendered)
+        self.assertIn('canards : 2/2 (12, dont 2 super-canards)', rendered)
+        without_bob = render_query(
+            self.state, 'Alice', command, statistics_excluded_nicknames=('bob',),
+        )[0]
+        self.assertIn('XP disponibles : 1/1', without_bob)
+        self.assertIn('canards : 1/1', without_bob)
+        for nickname in ('Bob', 'Visitor'):
+            with self.subTest(nickname=nickname):
+                result = render_query(self.state, nickname, command,
+                                      statistics_excluded_nicknames=('bob',))[0]
+                self.assertIn('Je ne connais aucun chasseur', result)
+                self.assertNotIn('Mon rang', result)
+        english = render_query(self.state, 'Alice', command, language='en')[0]
+        self.assertIn('[My rank]', english)
+        self.assertIn('including 2 golden ducks', english)
+        wire, = render_wire_notice('Alice', (rendered,))
+        self.assertLessEqual(len(wire), MAX_WIRE_BYTES)
+
+    def test_private_help_is_short_and_bilingual(self) -> None:
+        command = parse_command('!duckhelp')
+        assert command is not None
+        for language, heading in (('fr', '[Aide DuckHunt]'), ('en', '[DuckHunt help]')):
+            with self.subTest(language=language):
+                lines = render_query(GameState(), 'Visitor', command, language=language)
+                self.assertIn(heading, lines[0])
+                self.assertEqual(len(lines), 3)
+                body = ' '.join(lines)
+                for syntax in ('!bang', '!reload', '!shop', '!duckstats', '!inventory',
+                               '!lastduck', '!duckrank hits', '!myrank', '!duckhelp'):
+                    self.assertIn(syntax, body)
+                wires = render_wire_notice('Visitor', lines)
+                self.assertTrue(all(len(wire) <= MAX_WIRE_BYTES for wire in wires))
+                self.assertTrue(all('…'.encode() not in wire for wire in wires))
 
     def test_empty_ranking_is_explicit(self) -> None:
         self.assertIn("Aucun", render_ranking(GameState())[0])
