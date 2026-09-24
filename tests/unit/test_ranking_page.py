@@ -40,12 +40,12 @@ class RankingPageTests(unittest.TestCase):
         self.assertIn(".ranking-table-shell{margin-top:12px", rendered)
         self.assertNotIn("<script", rendered.casefold())
 
-    def test_order_matches_hits_best_time_and_canonical_identity(self) -> None:
+    def test_default_xp_order_and_optional_ducks_order_are_both_stable(self) -> None:
         hunters = tuple(
             sorted(
                 (
                     player("Zulu", hits=9, best_time_ms=450),
-                    player("A&B", hits=12, best_time_ms=700, golden_hits=2),
+                    player("A&B", hits=13, best_time_ms=700, golden_hits=2),
                     player("Alpha", hits=12, best_time_ms=500, level=2, experience=3),
                 ),
                 key=lambda candidate: candidate.key,
@@ -54,8 +54,18 @@ class RankingPageTests(unittest.TestCase):
         rendered = render_ranking_page(
             GameState(now_ns=1_788_134_400_000_000_000, players=hunters)
         ).decode("utf-8")
-        self.assertLess(rendered.index("Alpha"), rendered.index("A&amp;B"))
-        self.assertLess(rendered.index("A&amp;B"), rendered.index("Zulu"))
+        xp_view = rendered.split('id="classement-xp"', 1)[1]
+        ducks_view = rendered.split('id="classement-canards"', 1)[1].split(
+            'id="classement-xp"', 1
+        )[0]
+        self.assertLess(xp_view.index("Alpha"), xp_view.index("A&amp;B"))
+        self.assertLess(xp_view.index("A&amp;B"), xp_view.index("Zulu"))
+        self.assertLess(ducks_view.index("A&amp;B"), ducks_view.index("Alpha"))
+        self.assertLess(ducks_view.index("Alpha"), ducks_view.index("Zulu"))
+        self.assertIn('href="#classement-xp" aria-current="true"', xp_view)
+        self.assertIn('href="#classement-canards" aria-current="true"', ducks_view)
+        self.assertIn('.ranking-view-hits:target~.ranking-view-xp{display:none}', rendered)
+        self.assertNotIn("<script", rendered.casefold())
         self.assertNotIn("A&B", rendered)
         self.assertIn("0.5s", rendered)
         self.assertIn("0.7s", rendered)
@@ -100,9 +110,10 @@ class RankingPageTests(unittest.TestCase):
             deaths=10,
         )
         rendered = render_ranking_page(GameState(players=(hunter,))).decode("utf-8")
-        row = rendered.split('<tr class="rank-1">', 1)[1].split("</tr>", 1)[0]
+        xp_view = rendered.split('id="classement-xp"', 1)[1]
+        row = xp_view.split('<tr class="rank-1">', 1)[1].split("</tr>", 1)[0]
 
-        self.assertEqual(rendered.count('<th scope="col">'), 11)
+        self.assertEqual(xp_view.count('<th scope="col"'), 11)
         self.assertEqual(row.count("<td "), 11)
         self.assertIn('<colgroup><col class="col-place">', rendered)
         self.assertIn('<col class="col-inventory"></colgroup>', rendered)

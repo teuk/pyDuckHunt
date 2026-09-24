@@ -743,7 +743,7 @@ class ResponseRenderingTests(unittest.TestCase):
         )[0]
         self.assertIn("https://games.example/duckhunt/shop/", line)
 
-    def test_ranking_orders_hits_then_best_time_then_identity(self) -> None:
+    def test_ranking_orders_available_xp_then_hits_time_and_identity(self) -> None:
         tied = player("Aaron", hits=20, best_time_ms=2000)
         state = GameState(
             players=tuple(
@@ -751,8 +751,10 @@ class ResponseRenderingTests(unittest.TestCase):
             )
         )
         line = render_ranking(state, limit=3)[0]
+        self.assertLess(line.index("Alice"), line.index("Aaron"))
         self.assertLess(line.index("Aaron"), line.index("Bob"))
-        self.assertLess(line.index("Bob"), line.index("Alice"))
+        self.assertIn("· 25 xp", line)
+        self.assertEqual(line.count(" xp"), 3)
         self.assertIn("\x0307[TOP 3]\x0f", line)
         self.assertIn("🥇", line)
         self.assertIn("🥈", line)
@@ -820,8 +822,8 @@ class ResponseRenderingTests(unittest.TestCase):
         command = parse_command("!duckrank 1")
         assert command is not None
         line = render_query(self.state, "Alice", command)[0]
-        self.assertIn("Bob", line)
-        self.assertNotIn("Alice", line)
+        self.assertIn("Alice", line)
+        self.assertNotIn("Bob", line)
 
     def test_query_omits_configured_non_playing_admin_from_ranking(self) -> None:
         command = parse_command("!duckrank")

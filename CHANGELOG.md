@@ -142,6 +142,9 @@ superseded by the Unreleased section are retained here as development history.
 - Ranking publication now debounces bursts of atomic spool replacements before
   running the hardened root oneshot. Its explicit start-rate ceiling retains
   failure protection without disabling a busy channel's path watcher.
+- `!duckrank`, partyline summaries, the podium and the default public ranking
+  now follow available XP. The script-free HTML table can still be switched to
+  the historical ducks-hit order through accessible column links.
 - `!inventory` now reports the actual remaining lifetime of the suppressor, just
   like every other time-bounded active item, and avoids repeating the nominal
   duration or percentage of promotion coupons.

@@ -107,8 +107,8 @@ EN = {
         '        <div>\n'
         '          <div class="eyebrow"><span></span>TABLEAU DE CHASSE · DONNÉES DURABLES</div>\n'
         '          <h1>Classement des <em>chasseurs.</em></h1>\n'
-        '          <p>Les places suivent le nombre de canards touchés, puis le meilleur temps et '
-        'l’identité IRC canonique pour départager les égalités.</p>\n'
+        '          <p>Le classement principal suit l’XP disponible. Le tableau complet peut aussi '
+        'être trié par canards touchés, sans modifier les données du jeu.</p>\n'
         '        </div>\n'
         '        <div class="hero-signal" '
         'aria-hidden="true"><span>RANK</span><b>01</b><i>\\_O&lt;</i></div>\n'
@@ -124,8 +124,9 @@ EN = {
         '      <div class="table-heading"><div><span>TABLEAU COMPLET</span><h2>Tous les '
         'chasseurs</h2></div><time datetime="{5}">Mise à jour : {6}</time></div>\n'
         '      {7}\n'
-        '      <p class="ranking-note">XP désigne le solde actuellement disponible. La précision '
-        'affichée est celle de l’arme au niveau courant.</p>\n'
+        '      <p class="ranking-note">Le podium et le classement IRC suivent toujours l’XP '
+        'disponible. Les en-têtes XP et Canards changent uniquement l’ordre du tableau HTML. La '
+        'précision affichée est celle de l’arme au niveau courant.</p>\n'
         '    </section>\n'
         '  </main>\n'
         '  <footer class="site-footer"><div class="site-container '
@@ -178,8 +179,8 @@ EN = {
         '        <div>\n'
         '          <div class="eyebrow"><span></span>HUNTING RECORD · DURABLE DATA</div>\n'
         '          <h1>Hunter <em>rankings.</em></h1>\n'
-        '          <p>Places are ordered by ducks hit, then best time and canonical IRC identity '
-        'to break ties.</p>\n'
+        '          <p>The main ranking follows available XP. The full table can also be sorted by '
+        'ducks hit without changing game data.</p>\n'
         '        </div>\n'
         '        <div class="hero-signal" '
         'aria-hidden="true"><span>RANK</span><b>01</b><i>\\_O&lt;</i></div>\n'
@@ -195,8 +196,9 @@ EN = {
         '      <div class="table-heading"><div><span>FULL LEADERBOARD</span><h2>All '
         'hunters</h2></div><time datetime="{5}">Updated: {6}</time></div>\n'
         '      {7}\n'
-        '      <p class="ranking-note">XP is the currently available balance. Accuracy is the '
-        'weapon’s base accuracy at the current level.</p>\n'
+        '      <p class="ranking-note">The podium and IRC ranking always follow available XP. The '
+        'XP and Ducks headers only change the HTML table order. Accuracy is the weapon’s base '
+        'accuracy at the current level.</p>\n'
         '    </section>\n'
         '  </main>\n'
         '  <footer class="site-footer"><div class="site-container '
@@ -208,14 +210,15 @@ EN = {
     (
         '<article class="podium-card place-{0}"><span class="place">#{1:02d}</span><div '
         'class="podium-name">{2}</div><div '
-        'class="podium-score"><strong>{3}</strong><span>canards</span></div><div '
-        'class="podium-meta"><span>Niv. '
-        '{4}</span><span>{5}</span><span>{6}</span></div></article>'
+        'class="podium-score"><strong>{3}</strong><span>xp</span></div><div '
+        'class="podium-meta"><span>Niv. {4}</span><span>{5} canards</span><span>{6}</span>'
+        '<span>{7}</span></div></article>'
     ): (
         '<article class="podium-card place-{0}"><span class="place">#{1:02d}</span><div '
         'class="podium-name">{2}</div><div '
-        'class="podium-score"><strong>{3}</strong><span>ducks</span></div><div '
-        'class="podium-meta"><span>Lv. {4}</span><span>{5}</span><span>{6}</span></div></article>'
+        'class="podium-score"><strong>{3}</strong><span>xp</span></div><div '
+        'class="podium-meta"><span>Lv. {4}</span><span>{5} ducks</span><span>{6}</span>'
+        '<span>{7}</span></div></article>'
     ),
     (
         '<details class="inventory-details" data-inventory="1"><summary title="{0}" '
@@ -883,6 +886,10 @@ EN = {
     'بطبطة': 'QUACK',
     'Canard': 'Duck',
     'Canards': 'Ducks',
+    'Classement par XP disponible': 'Ranking by available XP',
+    'Classement par canards touchés': 'Ranking by ducks hit',
+    'Critère de tri': 'Ranking criterion',
+    'Trier par': 'Sort by',
     'Chasse': 'Hunting',
     'Charge': 'Ammunition',
     'Chargeurs': 'Magazines',

@@ -16,7 +16,7 @@ from pyduckhunt.game.karma import player_karma_basis_points
 from pyduckhunt.game.level_policy import level_policy
 from pyduckhunt.game.model import FATIGUE_SCALE, GameState, PlayerState
 from pyduckhunt.game.progression import available_experience
-from pyduckhunt.game.ranking import ranked_players
+from pyduckhunt.game.ranking import RankingCriterion, ranked_players
 from pyduckhunt.publishing.ranking_style import DH051_REFINEMENT_STYLE
 from pyduckhunt.rendering.responses import render_inventory
 from pyduckhunt.time_format import format_duration_ms
@@ -97,10 +97,19 @@ def render_ranking_page(
 
     if not isinstance(state, GameState):
         raise ValueError("ranking page requires a game state")
-    players = ranked_players(state, excluded_nicknames=excluded_nicknames)
-    summary = _summary(state, players)
-    podium = _podium(players)
-    table = _table(state, players)
+    experience_players = ranked_players(
+        state,
+        excluded_nicknames=excluded_nicknames,
+        criterion=RankingCriterion.EXPERIENCE,
+    )
+    hit_players = ranked_players(
+        state,
+        excluded_nicknames=excluded_nicknames,
+        criterion=RankingCriterion.HITS,
+    )
+    summary = _summary(state, experience_players)
+    podium = _podium(experience_players)
+    table = _sortable_tables(state, experience_players, hit_players)
     updated = _updated_at(state.now_ns)
     document = tr((
         '<!doctype html>\n'
@@ -148,8 +157,8 @@ def render_ranking_page(
         '        <div>\n'
         '          <div class="eyebrow"><span></span>TABLEAU DE CHASSE · DONNÉES DURABLES</div>\n'
         '          <h1>Classement des <em>chasseurs.</em></h1>\n'
-        '          <p>Les places suivent le nombre de canards touchés, puis le meilleur temps et '
-        'l’identité IRC canonique pour départager les égalités.</p>\n'
+        '          <p>Le classement principal suit l’XP disponible. Le tableau complet peut aussi '
+        'être trié par canards touchés, sans modifier les données du jeu.</p>\n'
         '        </div>\n'
         '        <div class="hero-signal" '
         'aria-hidden="true"><span>RANK</span><b>01</b><i>\\_O&lt;</i></div>\n'
@@ -165,8 +174,9 @@ def render_ranking_page(
         '      <div class="table-heading"><div><span>TABLEAU COMPLET</span><h2>Tous les '
         'chasseurs</h2></div><time datetime="{5}">Mise à jour : {6}</time></div>\n'
         '      {7}\n'
-        '      <p class="ranking-note">XP désigne le solde actuellement disponible. La précision '
-        'affichée est celle de l’arme au niveau courant.</p>\n'
+        '      <p class="ranking-note">Le podium et le classement IRC suivent toujours l’XP '
+        'disponible. Les en-têtes XP et Canards changent uniquement l’ordre du tableau HTML. La '
+        'précision affichée est celle de l’arme au niveau courant.</p>\n'
         '    </section>\n'
         '  </main>\n'
         '  <footer class="site-footer"><div class="site-container '
@@ -207,15 +217,58 @@ def _podium(players: tuple[PlayerState, ...]) -> str:
             tr((
                 '<article class="podium-card place-{0}"><span class="place">#{1:02d}</span><div '
                 'class="podium-name">{2}</div><div '
-                'class="podium-score"><strong>{3}</strong><span>canards</span></div><div '
-                'class="podium-meta"><span>Niv. '
-                '{4}</span><span>{5}</span><span>{6}</span></div></article>'
-            ), place, place, _escape(player.nickname), _integer(player.hits), player.level, _escape(tr(policy.weapon_label)), _time(player.best_time_ms))
+                'class="podium-score"><strong>{3}</strong><span>xp</span></div><div '
+                'class="podium-meta"><span>Niv. {4}</span><span>{5} canards</span><span>{6}</span>'
+                '<span>{7}</span></div></article>'
+            ),
+            place,
+            place,
+            _escape(player.nickname),
+            _integer(available_experience(player)),
+            player.level,
+            _integer(player.hits),
+            _escape(tr(policy.weapon_label)),
+            _time(player.best_time_ms),
+        )
         )
     return '<div class="podium-grid">' + "".join(cards) + "</div>"
 
 
-def _table(state: GameState, players: tuple[PlayerState, ...]) -> str:
+def _sortable_tables(
+    state: GameState,
+    experience_players: tuple[PlayerState, ...],
+    hit_players: tuple[PlayerState, ...],
+) -> str:
+    """Render script-free XP and duck views selected by URL fragments."""
+
+    if not experience_players:
+        return tr('<div class="table-empty">En attente du premier chasseur.</div>')
+    return (
+        _table(
+            state,
+            hit_players,
+            criterion=RankingCriterion.HITS,
+            view_id="classement-canards",
+            view_class="ranking-view-hits",
+        )
+        + _table(
+            state,
+            experience_players,
+            criterion=RankingCriterion.EXPERIENCE,
+            view_id="classement-xp",
+            view_class="ranking-view-xp",
+        )
+    )
+
+
+def _table(
+    state: GameState,
+    players: tuple[PlayerState, ...],
+    *,
+    criterion: RankingCriterion,
+    view_id: str,
+    view_class: str,
+) -> str:
     if not players:
         return tr('<div class="table-empty">En attente du premier chasseur.</div>')
     rows = []
@@ -330,30 +383,74 @@ def _table(state: GameState, players: tuple[PlayerState, ...]) -> str:
         )
         rows.append(f'<tr class="rank-{place}">{cells}</tr>')
     headings = (
-        "Place",
-        tr('Chasseur'),
-        tr("Chasse"),
-        tr('Meilleur temps'),
-        tr("Progression"),
-        tr('Arme'),
-        tr('État'),
-        tr("Charge"),
-        tr('Tirs'),
-        "Accidents",
-        tr('Inventaire'),
+        ("Place", None),
+        (tr('Chasseur'), None),
+        (tr("Canards"), RankingCriterion.HITS),
+        (tr('Meilleur temps'), None),
+        ("XP", RankingCriterion.EXPERIENCE),
+        (tr('Arme'), None),
+        (tr('État'), None),
+        (tr("Charge"), None),
+        (tr('Tirs'), None),
+        ("Accidents", None),
+        (tr('Inventaire'), None),
     )
-    header = "".join(f'<th scope="col">{heading}</th>' for heading in headings)
+    header = "".join(
+        _table_heading(label, sortable, criterion=criterion)
+        for label, sortable in headings
+    )
+    controls = _sort_controls(criterion)
+    view_label = (
+        tr("Classement par XP disponible")
+        if criterion is RankingCriterion.EXPERIENCE
+        else tr("Classement par canards touchés")
+    )
     return (
-        tr((
-            '<div class="ranking-table-shell" aria-label="Tableau complet du '
-            'classement"><table><caption>Classement complet des chasseurs '
-            'pyDuckHunt</caption><colgroup><col class="col-place"><col class="col-hunter"><col '
-            'class="col-hunt"><col class="col-time"><col class="col-progress"><col '
-            'class="col-weapon"><col class="col-condition"><col class="col-ammunition"><col '
-            'class="col-shots"><col class="col-incidents"><col '
-            'class="col-inventory"></colgroup><thead><tr>{0}</tr></thead><tbody>{1}</tbody></table></'
-            'div>'
-        ), header, ''.join(rows))
+        f'<section id="{view_id}" class="ranking-view {view_class}" '
+        f'aria-label="{_escape_attribute(view_label)}">{controls}'
+        f'<div class="ranking-table-shell" aria-label="{_escape_attribute(view_label)}">'
+        f'<table><caption>{_escape(view_label)}</caption><colgroup><col class="col-place"><col '
+        'class="col-hunter"><col class="col-hunt"><col class="col-time"><col '
+        'class="col-progress"><col class="col-weapon"><col class="col-condition"><col '
+        'class="col-ammunition"><col class="col-shots"><col class="col-incidents"><col '
+        f'class="col-inventory"></colgroup><thead><tr>{header}</tr></thead><tbody>{"".join(rows)}'
+        '</tbody></table></div></section>'
+    )
+
+
+def _sort_controls(criterion: RankingCriterion) -> str:
+    links = []
+    for target, label, fragment in (
+        (RankingCriterion.EXPERIENCE, "XP", "classement-xp"),
+        (RankingCriterion.HITS, tr("Canards"), "classement-canards"),
+    ):
+        current = ' aria-current="true"' if criterion is target else ""
+        links.append(f'<a href="#{fragment}"{current}>{_escape(label)}</a>')
+    return (
+        f'<nav class="ranking-sort" aria-label="{_escape_attribute(tr("Critère de tri"))}">'
+        f'<span>{_escape(tr("Trier par"))}</span>{"".join(links)}</nav>'
+    )
+
+
+def _table_heading(
+    label: str,
+    sortable: RankingCriterion | None,
+    *,
+    criterion: RankingCriterion,
+) -> str:
+    if sortable is None:
+        return f'<th scope="col">{_escape(label)}</th>'
+    fragment = (
+        "classement-xp"
+        if sortable is RankingCriterion.EXPERIENCE
+        else "classement-canards"
+    )
+    active = sortable is criterion
+    aria_sort = ' aria-sort="descending"' if active else ""
+    indicator = '<span aria-hidden="true">↓</span>' if active else ""
+    return (
+        f'<th scope="col"{aria_sort}><a class="sort-column" href="#{fragment}">'
+        f'{_escape(label)}{indicator}</a></th>'
     )
 
 
@@ -490,5 +587,5 @@ _STYLE = r"""
 _IRC_FORMATTING = re.compile(r"\x03(?:\d{1,2}(?:,\d{1,2})?)?|[\x02\x0f]")
 
 _INVENTORY_STYLE = r"""
-.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.ranking-table-shell{overflow:visible}.ranking-table-shell table{width:100%;min-width:0;table-layout:fixed}.ranking-table-shell th,.ranking-table-shell td{padding-inline:9px;white-space:normal;vertical-align:middle}.ranking-table-shell th{text-align:center}.ranking-table-shell th:nth-child(2){text-align:left}.col-place{width:5%}.col-hunter{width:11%}.col-hunt{width:8%}.col-time{width:8%}.col-progress{width:8%}.col-weapon{width:10%}.col-condition{width:11%}.col-ammunition{width:8%}.col-shots{width:14%}.col-incidents{width:12%}.col-inventory{width:5%}.cell-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 6px}.cell-facts.facts-3{grid-template-columns:repeat(3,minmax(0,1fr))}.cell-facts span{display:flex;min-width:0;align-items:baseline;gap:4px}.cell-facts b{color:var(--foreground);font:650 9px/1 ui-monospace,monospace}.cell-facts small{overflow:hidden;color:#66817e;font:7px/1 ui-monospace,monospace;text-overflow:ellipsis;white-space:nowrap}.place-cell,.hunt-cell,.time-cell,.progress-cell,.condition-cell,.ammunition-cell,.inventory-cell{text-align:center}.hunter-cell,.weapon-cell{overflow-wrap:anywhere}.inventory-cell{position:relative;overflow:visible}.inventory-details{position:relative;display:inline-block}.inventory-details summary{display:grid;place-items:center;width:31px;height:31px;margin:auto;border:1px solid #315052;border-radius:7px;background:#0e1e21;color:var(--amber);cursor:help;list-style:none;transition:border-color .15s ease,background .15s ease,transform .15s ease}.inventory-details summary::-webkit-details-marker{display:none}.inventory-details summary::marker{content:""}.inventory-details summary:hover,.inventory-details summary:focus-visible{border-color:var(--amber);background:#142427;outline:none;transform:translateY(-1px)}.inventory-icon{font-size:15px;line-height:1}.inventory-panel{display:none;position:absolute;z-index:6;right:calc(100% + 10px);top:50%;width:390px;max-width:70vw;padding:16px 17px;border:1px solid #3b595b;border-radius:9px;background:#071013f7;box-shadow:0 18px 55px #000b;color:var(--foreground);text-align:left;white-space:normal;transform:translateY(-50%)}.inventory-details:hover .inventory-panel,.inventory-details:focus-within .inventory-panel,.inventory-details[open] .inventory-panel{display:block}.inventory-panel strong{display:block;padding-bottom:10px;border-bottom:1px solid var(--line);color:var(--amber);font:650 11px/1.3 ui-monospace,monospace}.inventory-panel ul{display:flex;flex-wrap:wrap;gap:6px;margin:11px 0 0;padding:0;list-style:none}.inventory-panel li{padding:6px 8px;border:1px solid #284346;border-radius:5px;background:#0d191b;color:#b8cac7;font:9px/1.35 ui-monospace,monospace}tbody tr:first-child:not(:only-child) .inventory-panel{top:0;transform:none}tbody tr:last-child:not(:only-child) .inventory-panel{top:auto;bottom:0;transform:none}tbody tr:only-child .inventory-panel{position:static;width:min(390px,70vw);margin-top:8px;transform:none}@media(max-width:1180px){.ranking-table-shell{border:0;background:transparent;box-shadow:none}.ranking-table-shell table{table-layout:auto}.ranking-table-shell colgroup,.ranking-table-shell thead{display:none}.ranking-table-shell tbody{display:grid;gap:10px}.ranking-table-shell tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:16px;border:1px solid var(--line);border-radius:9px;background:linear-gradient(145deg,#0e1e21,#071013)}.ranking-table-shell td{display:block;padding:8px 9px;border:0}.ranking-table-shell td:nth-child(8){grid-column:auto;padding-block:8px;border-block:0}.ranking-table-shell td:before{content:attr(data-label);display:block;margin-bottom:5px;color:#607a77;font:7px/1 ui-monospace,monospace;text-transform:uppercase;letter-spacing:.1em}.hunter-cell,.weapon-cell,.shots-cell,.incidents-cell,.inventory-cell{grid-column:1/-1}.hunter-cell,.weapon-cell{overflow-wrap:normal}.cell-facts{max-width:300px}.shots-cell .cell-facts,.incidents-cell .cell-facts{max-width:none}.inventory-details{display:block}.inventory-details summary{margin:0}.inventory-panel,tbody tr:first-child:not(:only-child) .inventory-panel,tbody tr:last-child:not(:only-child) .inventory-panel{position:static;width:100%;max-width:none;margin-top:9px;transform:none}.inventory-panel ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:430px){.inventory-panel ul,.ranking-table-shell tr{grid-template-columns:1fr}.hunter-cell,.weapon-cell,.shots-cell,.incidents-cell,.inventory-cell{grid-column:auto}}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.ranking-view{scroll-margin-top:140px}.ranking-view-hits{display:none}.ranking-view-hits:target{display:block}.ranking-view-hits:target~.ranking-view-xp{display:none}.ranking-sort{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-top:18px;color:#6f8784;font:8px/1 ui-monospace,monospace;text-transform:uppercase;letter-spacing:.1em}.ranking-sort a{padding:7px 10px;border:1px solid #284346;border-radius:5px;color:#93aaa7;text-decoration:none}.ranking-sort a:hover,.ranking-sort a:focus-visible{border-color:var(--cyan);color:var(--foreground);outline:none}.ranking-sort a[aria-current=true]{border-color:#f4b74070;background:#f4b74012;color:var(--amber)}.sort-column{display:inline-flex;align-items:center;gap:5px;color:inherit;text-decoration:none}.sort-column:hover,.sort-column:focus-visible{color:var(--cyan);outline:none}.sort-column span{color:var(--amber);font-size:10px}.ranking-table-shell{overflow:visible}.ranking-table-shell table{width:100%;min-width:0;table-layout:fixed}.ranking-table-shell th,.ranking-table-shell td{padding-inline:9px;white-space:normal;vertical-align:middle}.ranking-table-shell th{text-align:center}.ranking-table-shell th:nth-child(2){text-align:left}.col-place{width:5%}.col-hunter{width:11%}.col-hunt{width:8%}.col-time{width:8%}.col-progress{width:8%}.col-weapon{width:10%}.col-condition{width:11%}.col-ammunition{width:8%}.col-shots{width:14%}.col-incidents{width:12%}.col-inventory{width:5%}.cell-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 6px}.cell-facts.facts-3{grid-template-columns:repeat(3,minmax(0,1fr))}.cell-facts span{display:flex;min-width:0;align-items:baseline;gap:4px}.cell-facts b{color:var(--foreground);font:650 9px/1 ui-monospace,monospace}.cell-facts small{overflow:hidden;color:#66817e;font:7px/1 ui-monospace,monospace;text-overflow:ellipsis;white-space:nowrap}.place-cell,.hunt-cell,.time-cell,.progress-cell,.condition-cell,.ammunition-cell,.inventory-cell{text-align:center}.hunter-cell,.weapon-cell{overflow-wrap:anywhere}.inventory-cell{position:relative;overflow:visible}.inventory-details{position:relative;display:inline-block}.inventory-details summary{display:grid;place-items:center;width:31px;height:31px;margin:auto;border:1px solid #315052;border-radius:7px;background:#0e1e21;color:var(--amber);cursor:help;list-style:none;transition:border-color .15s ease,background .15s ease,transform .15s ease}.inventory-details summary::-webkit-details-marker{display:none}.inventory-details summary::marker{content:""}.inventory-details summary:hover,.inventory-details summary:focus-visible{border-color:var(--amber);background:#142427;outline:none;transform:translateY(-1px)}.inventory-icon{font-size:15px;line-height:1}.inventory-panel{display:none;position:absolute;z-index:6;right:calc(100% + 10px);top:50%;width:390px;max-width:70vw;padding:16px 17px;border:1px solid #3b595b;border-radius:9px;background:#071013f7;box-shadow:0 18px 55px #000b;color:var(--foreground);text-align:left;white-space:normal;transform:translateY(-50%)}.inventory-details:hover .inventory-panel,.inventory-details:focus-within .inventory-panel,.inventory-details[open] .inventory-panel{display:block}.inventory-panel strong{display:block;padding-bottom:10px;border-bottom:1px solid var(--line);color:var(--amber);font:650 11px/1.3 ui-monospace,monospace}.inventory-panel ul{display:flex;flex-wrap:wrap;gap:6px;margin:11px 0 0;padding:0;list-style:none}.inventory-panel li{padding:6px 8px;border:1px solid #284346;border-radius:5px;background:#0d191b;color:#b8cac7;font:9px/1.35 ui-monospace,monospace}tbody tr:first-child:not(:only-child) .inventory-panel{top:0;transform:none}tbody tr:last-child:not(:only-child) .inventory-panel{top:auto;bottom:0;transform:none}tbody tr:only-child .inventory-panel{position:static;width:min(390px,70vw);margin-top:8px;transform:none}@media(max-width:1180px){.ranking-table-shell{border:0;background:transparent;box-shadow:none}.ranking-table-shell table{table-layout:auto}.ranking-table-shell colgroup,.ranking-table-shell thead{display:none}.ranking-table-shell tbody{display:grid;gap:10px}.ranking-table-shell tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:16px;border:1px solid var(--line);border-radius:9px;background:linear-gradient(145deg,#0e1e21,#071013)}.ranking-table-shell td{display:block;padding:8px 9px;border:0}.ranking-table-shell td:nth-child(8){grid-column:auto;padding-block:8px;border-block:0}.ranking-table-shell td:before{content:attr(data-label);display:block;margin-bottom:5px;color:#607a77;font:7px/1 ui-monospace,monospace;text-transform:uppercase;letter-spacing:.1em}.hunter-cell,.weapon-cell,.shots-cell,.incidents-cell,.inventory-cell{grid-column:1/-1}.hunter-cell,.weapon-cell{overflow-wrap:normal}.cell-facts{max-width:300px}.shots-cell .cell-facts,.incidents-cell .cell-facts{max-width:none}.inventory-details{display:block}.inventory-details summary{margin:0}.inventory-panel,tbody tr:first-child:not(:only-child) .inventory-panel,tbody tr:last-child:not(:only-child) .inventory-panel{position:static;width:100%;max-width:none;margin-top:9px;transform:none}.inventory-panel ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:430px){.ranking-sort{justify-content:flex-start}.inventory-panel ul,.ranking-table-shell tr{grid-template-columns:1fr}.hunter-cell,.weapon-cell,.shots-cell,.incidents-cell,.inventory-cell{grid-column:auto}}
 """

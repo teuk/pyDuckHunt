@@ -470,15 +470,16 @@ class PartylineRuntimeTests(unittest.TestCase):
                         name.casefold(),
                         name,
                         hits=hits,
+                        level=level,
                         best_time_ms=1_000 + hits,
                     )
-                    for name, hits in (
-                        ("Alpha", 50),
-                        ("Bravo", 40),
-                        ("Charlie", 30),
-                        ("Delta", 20),
-                        ("Echo", 10),
-                        ("Zulu", 1),
+                    for name, hits, level in (
+                        ("Alpha", 1, 6),
+                        ("Bravo", 40, 5),
+                        ("Charlie", 30, 4),
+                        ("Delta", 20, 3),
+                        ("Echo", 10, 2),
+                        ("Zulu", 50, 1),
                     )
                 ),
                 key=lambda player: player.key,

@@ -1016,7 +1016,7 @@ def render_ranking(
         entries = "  •  ".join(
             f"{medals[index - 1] if index <= len(medals) else f'{index}.'} "
             f"{_BOLD}{player.nickname}{_RESET} "
-            f"{_COLOR_GREEN}· {player.hits}{_RESET}"
+            f"{_COLOR_GREEN}· {available_experience(player)} xp{_RESET}"
             for index, player in enumerate(ordered, start=1)
         )
         lines = (f"{_COLOR_ORANGE}[TOP {limit}]{_RESET}  {entries}",)

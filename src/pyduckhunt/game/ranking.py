@@ -2,8 +2,18 @@
 
 from __future__ import annotations
 
+from enum import Enum
+
 from pyduckhunt.game.model import GameState, PlayerState
+from pyduckhunt.game.progression import available_experience
 from pyduckhunt.identity import rfc1459_casefold
+
+
+class RankingCriterion(str, Enum):
+    """Supported deterministic ranking views."""
+
+    EXPERIENCE = "experience"
+    HITS = "hits"
 
 
 def is_statistically_excluded(
@@ -54,25 +64,42 @@ def ranked_players(
     *,
     limit: int | None = None,
     excluded_nicknames: tuple[str, ...] = (),
+    criterion: RankingCriterion = RankingCriterion.EXPERIENCE,
 ) -> tuple[PlayerState, ...]:
-    """Return hunters by hits, best time and canonical IRC identity."""
+    """Return hunters by one explicit stable public-ranking criterion."""
 
     if not isinstance(state, GameState):
         raise ValueError("ranking requires a game state")
     if limit is not None and (type(limit) is not int or limit < 1):
         raise ValueError("ranking limit must be a positive integer or none")
+    if not isinstance(criterion, RankingCriterion):
+        raise ValueError("ranking criterion is unsupported")
+    ranking_key = (
+        _experience_ranking_key
+        if criterion is RankingCriterion.EXPERIENCE
+        else _hit_ranking_key
+    )
     ordered = tuple(
         sorted(
             statistical_players(state, excluded_nicknames=excluded_nicknames),
-            key=lambda player: (
-                -player.hits,
-                (
-                    player.best_time_ms
-                    if player.best_time_ms is not None
-                    else 2**63 - 1
-                ),
-                player.key,
-            ),
+            key=ranking_key,
         )
     )
     return ordered if limit is None else ordered[:limit]
+
+
+def _best_time_key(player: PlayerState) -> int:
+    return player.best_time_ms if player.best_time_ms is not None else 2**63 - 1
+
+
+def _experience_ranking_key(player: PlayerState) -> tuple[int, int, int, str]:
+    return (
+        -available_experience(player),
+        -player.hits,
+        _best_time_key(player),
+        player.key,
+    )
+
+
+def _hit_ranking_key(player: PlayerState) -> tuple[int, int, str]:
+    return (-player.hits, _best_time_key(player), player.key)

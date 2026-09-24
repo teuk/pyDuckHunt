@@ -39,9 +39,14 @@ persistence or interrupt IRC.
 ## Content contract
 
 The HTML exporter is deterministic, script-free and capped at 4 MiB. It escapes
-all nicknames, contains a restrictive content-security policy and uses the same
-stable order as IRC: hits descending, best time ascending, then canonical IRC
-identity. It exposes only durable game-profile facts. It does not publish
+all nicknames and contains a restrictive content-security policy. IRC
+`!duckrank`, partyline `.summary`, the podium and the default HTML view always
+rank by available XP descending. Ties are broken by ducks hit descending, best
+time ascending and canonical IRC identity. The HTML table also offers an
+explicit ducks-hit view which preserves the previous order: hits descending,
+best time ascending, then canonical IRC identity. Both views are pre-rendered;
+fragment links and CSS switch between them without JavaScript or state changes.
+The page exposes only durable game-profile facts. It does not publish
 hostmasks, account data, raw IRC text, secrets or private logs.
 
 The page shows the available XP balance rather than invented lifetime earnings.
