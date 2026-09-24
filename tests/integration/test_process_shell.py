@@ -14,7 +14,13 @@ from pyduckhunt.irc import (
     IRCTransport,
     IRCTransportPolicy,
 )
-from pyduckhunt.persistence import JournalFile, ReplayEvent, SnapshotStore, recover
+from pyduckhunt.persistence import (
+    EventKind,
+    JournalFile,
+    ReplayEvent,
+    SnapshotStore,
+    recover,
+)
 from pyduckhunt.runtime import (
     BridgeStatus,
     IRCCommandContext,
@@ -159,6 +165,51 @@ class ProcessShellIntegrationTests(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertEqual(shell.state, ProcessShellState.NEW)
         self.assertEqual(shell.stop(0).state, ProcessShellState.STOPPED)
+
+    def test_nick_change_is_durable_deferred_and_resolved_on_participation(self) -> None:
+        shell = self.build_shell()
+        shell.start(0)
+        read_available(self.server)
+        self.server.sendall(
+            b":server 001 DuckBot :welcome\r\n"
+            b":DuckBot!u@h JOIN #pond\r\n"
+            b":Hunter!u@h PRIVMSG #pond :!duckstats\r\n"
+        )
+        created = shell.poll(1)
+        self.assertEqual(created.state, ProcessShellState.RUNNING)
+        read_available(self.server)
+
+        self.server.sendall(b":Hunter!u@h NICK Wizard\r\n")
+        tracked = shell.poll(2)
+        self.assertEqual(len(tracked.bridge_results), 1)
+        self.assertIsNotNone(shell.runtime.state.player("hunter"))
+        self.assertIsNone(shell.runtime.state.player("wizard"))
+        self.assertEqual(len(shell.runtime.state.pending_identity_transfers), 1)
+
+        self.server.sendall(b":Wizard!u@h PRIVMSG #pond :!duckstats\r\n")
+        resolved = shell.poll(3)
+        self.assertEqual(len(resolved.bridge_results), 1)
+        self.assertIsNone(shell.runtime.state.player("hunter"))
+        self.assertEqual(shell.runtime.state.player("wizard").nickname, "Wizard")
+        self.assertEqual(shell.runtime.state.pending_identity_transfers, ())
+        read_available(self.server)
+
+        visible = shell.runtime.state
+        shell.stop(4, "maintenance")
+        read_available(self.server)
+        self.server.close()
+        self.assertEqual(shell.poll(5).state, ProcessShellState.STOPPED)
+        records = self.journal.read_records()
+        self.assertEqual(
+            [record.event.kind for record in records],
+            [
+                EventKind.RUNTIME_COMMAND,
+                EventKind.TRACK_NICK_CHANGE,
+                EventKind.RESOLVE_NICK_TRANSFER,
+                EventKind.RUNTIME_COMMAND,
+            ],
+        )
+        self.assertEqual(recover(self.snapshots, self.journal).state, visible)
 
     def test_application_failure_is_bounded_and_stops_admission(self) -> None:
         def failed_resolver(state: GameState, context: IRCCommandContext) -> ReplayEvent:

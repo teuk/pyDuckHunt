@@ -162,6 +162,11 @@ def _advance(state: GameState, now_ns: int) -> Transition:
             effects=tuple(active_effects),
             curses=tuple(active_curses),
             scheduled_actions=tuple(pending_actions),
+            pending_identity_transfers=tuple(
+                transfer
+                for transfer in state.pending_identity_transfers
+                if transfer.expires_at_ns > now_ns
+            ),
         ),
         outcomes=tuple(outcomes),
     )

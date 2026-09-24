@@ -67,6 +67,7 @@ class SnapshotIntegrationTests(unittest.TestCase):
         )
         raw = json.loads(self.path.read_text(encoding="utf-8"))
         raw["schema"] = 11
+        del raw["state"]["pending_identity_transfers"]
         del raw["state"]["bread_policy_version"]
         del raw["state"]["last_flight"]
         del raw["state"]["last_shooter_key"]

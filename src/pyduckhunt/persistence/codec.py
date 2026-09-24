@@ -18,6 +18,7 @@ from pyduckhunt.game.model import (
     LastFlight,
     LastFlightConclusion,
     LETTER_SLOT_COUNT,
+    PendingIdentityTransfer,
     PlayerState,
     MIN_FATIGUE_CENTI,
     ScheduledAction,
@@ -33,7 +34,7 @@ from pyduckhunt.game.runtime import (
 )
 
 
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 SUPPORTED_SCHEMA_VERSIONS = (
     11,
     12,
@@ -48,6 +49,7 @@ SUPPORTED_SCHEMA_VERSIONS = (
     21,
     22,
     23,
+    24,
     SCHEMA_VERSION,
 )
 DAY_NS = 86_400_000_000_000
@@ -222,6 +224,16 @@ def encode_game_state(state: GameState) -> dict[str, object]:
         }
         for window in state.throttle_windows
     ]
+    pending_identity_transfers = [
+        {
+            "destination_key": transfer.destination_key,
+            "destination_nickname": transfer.destination_nickname,
+            "expires_at_ns": transfer.expires_at_ns,
+            "source_key": transfer.source_key,
+            "source_nickname": transfer.source_nickname,
+        }
+        for transfer in state.pending_identity_transfers
+    ]
     return {
         "bread_policy_version": state.bread_policy_version,
         **({} if state.bread_plan_effect_ids is None else
@@ -238,6 +250,7 @@ def encode_game_state(state: GameState) -> dict[str, object]:
         "next_flight_id": state.next_flight_id,
         "now_ns": state.now_ns,
         "players": players,
+        "pending_identity_transfers": pending_identity_transfers,
         "scheduled_actions": scheduled_actions,
         "throttle_windows": throttle_windows,
     }
@@ -263,6 +276,8 @@ def _decode_game_state(raw: object, schema_version: int) -> GameState:
         state_fields.add("last_flight")
     if schema_version >= 19:
         state_fields.add("last_shooter_key")
+    if schema_version >= 25:
+        state_fields.add("pending_identity_transfers")
     bread_policy_version = 1
     if schema_version >= 24:
         state_fields.add("bread_policy_version")
@@ -844,6 +859,56 @@ def _decode_game_state(raw: object, schema_version: int) -> GameState:
             raise CodecError(f"{field} violates runtime policy") from error
         throttle_windows.append(decoded_window)
 
+    pending_identity_transfers: list[PendingIdentityTransfer] = []
+    if schema_version >= 25:
+        raw_transfers = payload["pending_identity_transfers"]
+        if not isinstance(raw_transfers, list):
+            raise CodecError("state.pending_identity_transfers must be a JSON array")
+        for index, raw_transfer in enumerate(raw_transfers):
+            field = f"state.pending_identity_transfers[{index}]"
+            transfer = _mapping(raw_transfer, field)
+            _exact_keys(
+                transfer,
+                {
+                    "destination_key",
+                    "destination_nickname",
+                    "expires_at_ns",
+                    "source_key",
+                    "source_nickname",
+                },
+                field,
+            )
+            source_key = transfer["source_key"]
+            source_nickname = transfer["source_nickname"]
+            destination_key = transfer["destination_key"]
+            destination_nickname = transfer["destination_nickname"]
+            if not all(
+                isinstance(value, str)
+                for value in (
+                    source_key,
+                    source_nickname,
+                    destination_key,
+                    destination_nickname,
+                )
+            ):
+                raise CodecError(f"{field} identity fields must be strings")
+            try:
+                pending_identity_transfers.append(
+                    PendingIdentityTransfer(
+                        source_key=source_key,
+                        source_nickname=source_nickname,
+                        destination_key=destination_key,
+                        destination_nickname=destination_nickname,
+                        expires_at_ns=_integer(
+                            transfer["expires_at_ns"],
+                            f"{field}.expires_at_ns",
+                            minimum=1,
+                        ),
+                    )
+                )
+            except ValueError as error:
+                raise CodecError(f"{field} violates identity invariants") from error
+
     return GameState(
         now_ns=state_now_ns,
         next_flight_id=_integer(
@@ -867,6 +932,7 @@ def _decode_game_state(raw: object, schema_version: int) -> GameState:
         curses=tuple(curses),
         daily_schedule=daily_schedule,
         throttle_windows=tuple(throttle_windows),
+        pending_identity_transfers=tuple(pending_identity_transfers),
         bread_plan_effect_ids=bread_ids,
         bread_policy_version=bread_policy_version,
     )

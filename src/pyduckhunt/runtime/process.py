@@ -12,7 +12,7 @@ from pyduckhunt.irc.socket_adapter import IRCAdapterResult, IRCSocketAdapter
 from pyduckhunt.irc.message import IRCMessage
 from pyduckhunt.irc.transport import IRCTransportState
 from pyduckhunt.partyline.runtime import PartylineController
-from pyduckhunt.runtime.application import BridgeResult, IRCGameBridge
+from pyduckhunt.runtime.application import BridgeResult, BridgeStatus, IRCGameBridge
 from pyduckhunt.runtime.orchestrator import RuntimeOrchestrator
 
 
@@ -146,6 +146,9 @@ class ProcessShell:
                 for message in network.messages:
                     if self.message_observer is not None:
                         self.message_observer(message)
+                    identity_result = self.bridge.observe_identity(now_ns, message)
+                    if identity_result.status is not BridgeStatus.IGNORED:
+                        handled.append(identity_result)
                     if message.command not in ("PRIVMSG", "NOTICE", "TAGMSG"):
                         continue
                     consumed = (

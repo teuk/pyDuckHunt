@@ -177,6 +177,35 @@ class ThrottleWindow:
 
 
 @dataclass(frozen=True, slots=True)
+class PendingIdentityTransfer:
+    """One bounded Menz-compatible nickname transfer awaiting participation."""
+
+    source_key: str
+    source_nickname: str
+    destination_key: str
+    destination_nickname: str
+    expires_at_ns: int
+
+    def __post_init__(self) -> None:
+        for field_name in ("source_nickname", "destination_nickname"):
+            value = getattr(self, field_name)
+            if (
+                type(value) is not str
+                or not value
+                or any(character in value for character in (" ", "\x00", "\r", "\n"))
+            ):
+                raise ValueError(f"pending transfer {field_name} is invalid")
+        if self.source_key != rfc1459_casefold(self.source_nickname):
+            raise ValueError("pending transfer source key is not canonical")
+        if self.destination_key != rfc1459_casefold(self.destination_nickname):
+            raise ValueError("pending transfer destination key is not canonical")
+        if self.source_key == self.destination_key:
+            raise ValueError("pending transfer identities must differ")
+        if type(self.expires_at_ns) is not int or self.expires_at_ns < 1:
+            raise ValueError("pending transfer expiration must be positive")
+
+
+@dataclass(frozen=True, slots=True)
 class ActiveCurse:
     """A bounded negative modifier acquired outside the shop."""
 
@@ -542,6 +571,7 @@ class GameState:
     curses: tuple[ActiveCurse, ...] = ()
     daily_schedule: DailySchedule | None = None
     throttle_windows: tuple[ThrottleWindow, ...] = ()
+    pending_identity_transfers: tuple[PendingIdentityTransfer, ...] = ()
     # Legacy policy 1 uses this optional fingerprint for hourly bread replans.
     # Policy 2 retains the field only so upgraded snapshots stay replayable.
     bread_plan_effect_ids: tuple[int, ...] | None = None
@@ -663,6 +693,25 @@ class GameState:
             set(window_keys)
         ):
             raise ValueError("throttle windows must be unique and sorted")
+        if not all(
+            isinstance(transfer, PendingIdentityTransfer)
+            for transfer in self.pending_identity_transfers
+        ):
+            raise ValueError("pending identity transfers must satisfy their contract")
+        destination_keys = tuple(
+            transfer.destination_key for transfer in self.pending_identity_transfers
+        )
+        if destination_keys != tuple(sorted(destination_keys)) or len(
+            destination_keys
+        ) != len(set(destination_keys)):
+            raise ValueError(
+                "pending identity transfers must be unique and sorted by destination"
+            )
+        if any(
+            transfer.expires_at_ns <= self.now_ns
+            for transfer in self.pending_identity_transfers
+        ):
+            raise ValueError("expired identity transfer must not remain in game state")
 
     def player(self, key: str) -> PlayerState | None:
         return next((player for player in self.players if player.key == key), None)
@@ -685,6 +734,7 @@ class GameState:
             curses=self.curses,
             daily_schedule=self.daily_schedule,
             throttle_windows=self.throttle_windows,
+            pending_identity_transfers=self.pending_identity_transfers,
             bread_plan_effect_ids=self.bread_plan_effect_ids,
             bread_policy_version=self.bread_policy_version,
         )

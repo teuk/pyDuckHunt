@@ -81,6 +81,7 @@ class CollectionAndCarryTests(unittest.TestCase):
         )
         payload = encode_game_state(state)
         self.assertEqual(decode_game_state(payload), state)
+        del payload["pending_identity_transfers"]
         del payload["bread_policy_version"]
         del payload["last_flight"]
         del payload["last_shooter_key"]

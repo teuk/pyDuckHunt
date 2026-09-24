@@ -8,7 +8,7 @@ these changes do not create a stable release or a tag.
 ### Development line
 
 - Advance the public beta development line from 0.1.0-dev to 0.2.0-dev for
-  the fixed 24-flight schedule, one-bread/one-flight contract, schema-24
+  the fixed 24-flight schedule, one-bread/one-flight contract, schema-25
   persistence and bilingual operation. This remains an untagged development
   version rather than a stable release.
 
@@ -108,6 +108,20 @@ these changes do not create a stable release or a tag.
 
 ### Ranking, statistics and durability
 
+- Track IRC nickname changes with the deferred Duck Hunt 2.11 contract. A
+  known profile is not moved on `NICK`; the transfer remains pending for one
+  hour and is consumed only by later participation under the new nickname.
+  Returning to the original nickname, leaving the channel or quitting cancels
+  the pending transfer. Chained nick changes keep their original source.
+- Rename an unopposed profile and merge an existing destination profile only
+  when that pending transfer is consumed. The merge preserves summed XP and
+  counters, the best reaction time, unique inventory, the most restrictive
+  weapon state and already-used ammunition. Runtime references follow the
+  surviving identity without rewriting historical events.
+- Extend persistence through schema 25 with bounded pending nickname transfers
+  and three exact replay intents: track, resolve and cancel. Schema-24 and
+  older snapshots default to no pending transfer, while new transfers survive
+  snapshots and restart without exposing hostmasks or IRC messages.
 - Add an RFC1459-aware exclusion list for non-playing operators across IRC,
   partyline, generated ranking and aggregate metrics, without deleting history.
 - Give the generated ranking a hover/focus/touch inventory view, eleven compact

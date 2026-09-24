@@ -58,6 +58,12 @@ can maintain a synchronized, in-memory roster without retaining hostmasks. A
 kick of the current nickname schedules a join for that channel without
 inventing game state.
 
+The application bridge additionally turns relevant `NICK`, `PART` and `QUIT`
+facts into bounded identity-transfer replay events. A nickname change never
+moves statistics on receipt. It records a one-hour pending transfer that is
+resolved only before later game participation; departure cancels it. See
+`docs/NICKNAME_TRANSFERS.md` for the profile and merge contract.
+
 Application output follows the reverse boundary. The transport accepts an
 immutable batch only in `ready`, validates every complete wire line before
 returning send actions, and preserves batch order. The socket adapter reserves

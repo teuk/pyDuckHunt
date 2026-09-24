@@ -11,6 +11,11 @@ from pyduckhunt.game.admin import (
 )
 from pyduckhunt.game.commands import Command
 from pyduckhunt.game.engine import advance_time, apply_command, start_flight
+from pyduckhunt.game.identity_transfer import (
+    cancel_pending_identity_transfer,
+    resolve_pending_identity_transfer,
+    track_nick_change,
+)
 from pyduckhunt.game.model import GameState, Transition
 from pyduckhunt.game.shop import purchase
 from pyduckhunt.game.runtime import (
@@ -44,6 +49,27 @@ class ReplayResult:
 
 
 def apply_replay_event(state: GameState, event: ReplayEvent) -> Transition:
+    if event.kind is EventKind.TRACK_NICK_CHANGE:
+        assert event.nickname is not None
+        assert event.target_nickname is not None
+        advanced = advance_time(state, event.now_ns)
+        tracked = track_nick_change(
+            advanced.state,
+            event.nickname,
+            event.target_nickname,
+            event.now_ns,
+        )
+        return Transition(tracked.state, advanced.outcomes + tracked.outcomes)
+    if event.kind is EventKind.RESOLVE_NICK_TRANSFER:
+        assert event.nickname is not None
+        advanced = advance_time(state, event.now_ns)
+        resolved = resolve_pending_identity_transfer(advanced.state, event.nickname)
+        return Transition(resolved.state, advanced.outcomes + resolved.outcomes)
+    if event.kind is EventKind.CANCEL_NICK_TRANSFER:
+        assert event.nickname is not None
+        advanced = advance_time(state, event.now_ns)
+        cancelled = cancel_pending_identity_transfer(advanced.state, event.nickname)
+        return Transition(cancelled.state, advanced.outcomes + cancelled.outcomes)
     if event.kind is EventKind.MIGRATE_BREAD_POLICY:
         return migrate_bread_policy(state, event.now_ns)
     if event.kind is EventKind.ENABLE_HOURLY_BREAD:

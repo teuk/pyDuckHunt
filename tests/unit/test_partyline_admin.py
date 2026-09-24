@@ -142,12 +142,12 @@ class PartylineAdminTests(unittest.TestCase):
         )
         self.assertFalse(rearmed.state.players[0].confiscated)
         self.assertFalse(rearmed.state.players[0].permanently_confiscated)
-        self.assertEqual(SCHEMA_VERSION, 24)
+        self.assertEqual(SCHEMA_VERSION, 25)
 
         with tempfile.TemporaryDirectory() as directory:
             journal = JournalFile(Path(directory) / "events.jsonl")
             record = journal.append(event)
-            self.assertEqual(record.source_schema, 24)
+            self.assertEqual(record.source_schema, 25)
             replayed = replay_records(
                 journal.read_records(),
                 initial_state=GameState(players=(player(),)),

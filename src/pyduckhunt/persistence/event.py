@@ -27,6 +27,7 @@ from pyduckhunt.game.runtime import (
     FlightSelection,
     validate_daily_schedule,
 )
+from pyduckhunt.identity import same_irc_name
 from pyduckhunt.persistence.codec import CodecError
 
 
@@ -46,6 +47,9 @@ class EventKind(str, Enum):
     ADMIN_PLAYER_UPDATE = "admin_player_update"
     ADMIN_WEAPON_CONTROL = "admin_weapon_control"
     ADMIN_CHANNEL_ITEM = "admin_channel_item"
+    TRACK_NICK_CHANGE = "track_nick_change"
+    RESOLVE_NICK_TRANSFER = "resolve_nick_transfer"
+    CANCEL_NICK_TRANSFER = "cancel_nick_transfer"
 
 
 def _event_mapping(value: object, field: str) -> Mapping[str, Any]:
@@ -454,6 +458,80 @@ class ReplayEvent:
                 )
             ) or self.arguments or self.delay_settled or self.schedule_deadlines_ns:
                 raise ValueError("admin channel item contains unrelated fields")
+        elif self.kind is EventKind.TRACK_NICK_CHANGE:
+            if (
+                type(self.nickname) is not str
+                or not self.nickname
+                or type(self.target_nickname) is not str
+                or not self.target_nickname
+                or same_irc_name(self.nickname, self.target_nickname)
+                or any(
+                    character in value
+                    for value in (self.nickname, self.target_nickname)
+                    for character in (" ", "\x00", "\r", "\n")
+                )
+                or any(
+                    value is not None
+                    for value in (
+                        self.lifetime_ns,
+                        self.flight_health,
+                        self.flight_kind,
+                        self.flight_reward_experience,
+                        self.command_kind,
+                        self.invoked_as,
+                        self.item_id,
+                        self.charged_cost,
+                        self.magnitude,
+                        self.target_present,
+                        self.scheduled_for_ns,
+                        self.fatigue_relief_centi,
+                        self.fatigue_target_centi,
+                        self.shot_attempt,
+                        self.schedule_day_start_ns,
+                    )
+                )
+                or self.arguments
+                or self.delay_settled
+                or self.schedule_deadlines_ns
+            ):
+                raise ValueError("nickname change event fields are invalid")
+        elif self.kind in (
+            EventKind.RESOLVE_NICK_TRANSFER,
+            EventKind.CANCEL_NICK_TRANSFER,
+        ):
+            if (
+                type(self.nickname) is not str
+                or not self.nickname
+                or any(
+                    character in self.nickname
+                    for character in (" ", "\x00", "\r", "\n")
+                )
+                or any(
+                    value is not None
+                    for value in (
+                        self.lifetime_ns,
+                        self.flight_health,
+                        self.flight_kind,
+                        self.flight_reward_experience,
+                        self.command_kind,
+                        self.invoked_as,
+                        self.item_id,
+                        self.charged_cost,
+                        self.magnitude,
+                        self.target_nickname,
+                        self.target_present,
+                        self.scheduled_for_ns,
+                        self.fatigue_relief_centi,
+                        self.fatigue_target_centi,
+                        self.shot_attempt,
+                        self.schedule_day_start_ns,
+                    )
+                )
+                or self.arguments
+                or self.delay_settled
+                or self.schedule_deadlines_ns
+            ):
+                raise ValueError("nickname transfer event fields are invalid")
         elif any(
             value is not None
             for value in (
@@ -544,6 +622,28 @@ class ReplayEvent:
     @classmethod
     def advance_time(cls, now_ns: int) -> ReplayEvent:
         return cls(EventKind.ADVANCE_TIME, now_ns)
+
+    @classmethod
+    def track_nick_change(
+        cls,
+        now_ns: int,
+        old_nickname: str,
+        new_nickname: str,
+    ) -> ReplayEvent:
+        return cls(
+            EventKind.TRACK_NICK_CHANGE,
+            now_ns,
+            nickname=old_nickname,
+            target_nickname=new_nickname,
+        )
+
+    @classmethod
+    def resolve_nick_transfer(cls, now_ns: int, nickname: str) -> ReplayEvent:
+        return cls(EventKind.RESOLVE_NICK_TRANSFER, now_ns, nickname=nickname)
+
+    @classmethod
+    def cancel_nick_transfer(cls, now_ns: int, nickname: str) -> ReplayEvent:
+        return cls(EventKind.CANCEL_NICK_TRANSFER, now_ns, nickname=nickname)
 
     @classmethod
     def admin_player_update(
@@ -840,6 +940,18 @@ class ReplayEvent:
                     "scheduled_for_ns": self.scheduled_for_ns,
                 }
             )
+        elif self.kind is EventKind.TRACK_NICK_CHANGE:
+            payload.update(
+                {
+                    "nickname": self.nickname,
+                    "target_nickname": self.target_nickname,
+                }
+            )
+        elif self.kind in (
+            EventKind.RESOLVE_NICK_TRANSFER,
+            EventKind.CANCEL_NICK_TRANSFER,
+        ):
+            payload["nickname"] = self.nickname
         return payload
 
     @classmethod
@@ -950,6 +1062,39 @@ class ReplayEvent:
             if set(raw) != {"kind", "now_ns"}:
                 raise CodecError("advance_time event fields differ from schema")
             return cls(kind, now_ns)
+
+        if kind is EventKind.TRACK_NICK_CHANGE:
+            if set(raw) != {
+                "kind",
+                "nickname",
+                "now_ns",
+                "target_nickname",
+            }:
+                raise CodecError("nickname change event fields differ from schema")
+            try:
+                return cls.track_nick_change(
+                    now_ns,
+                    raw["nickname"],
+                    raw["target_nickname"],
+                )
+            except (TypeError, ValueError) as error:
+                raise CodecError("nickname change event values are invalid") from error
+
+        if kind in (
+            EventKind.RESOLVE_NICK_TRANSFER,
+            EventKind.CANCEL_NICK_TRANSFER,
+        ):
+            if set(raw) != {"kind", "nickname", "now_ns"}:
+                raise CodecError("nickname transfer event fields differ from schema")
+            try:
+                constructor = (
+                    cls.resolve_nick_transfer
+                    if kind is EventKind.RESOLVE_NICK_TRANSFER
+                    else cls.cancel_nick_transfer
+                )
+                return constructor(now_ns, raw["nickname"])
+            except (TypeError, ValueError) as error:
+                raise CodecError("nickname transfer event values are invalid") from error
 
         if kind is EventKind.ADMIN_PLAYER_UPDATE:
             if set(raw) != {

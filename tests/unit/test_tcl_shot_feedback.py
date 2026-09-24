@@ -171,11 +171,16 @@ class TclShotFeedbackTests(unittest.TestCase):
         state = flying()
         payload = encode_game_state(state)
         self.assertNotIn('noisy_misses', payload['flight'])
-        legacy_payload = {key: value for key, value in payload.items() if key != 'bread_policy_version'}
+        legacy_payload = {
+            key: value
+            for key, value in payload.items()
+            if key not in ('bread_policy_version', 'pending_identity_transfers')
+        }
         migrated = decode_game_state(legacy_payload, schema_version=22)
         self.assertEqual(migrated.bread_policy_version, 1)
         reencoded = encode_game_state(migrated)
         del reencoded['bread_policy_version']
+        del reencoded['pending_identity_transfers']
         self.assertEqual(reencoded, legacy_payload)
         for escape in (False, True):
             event = ReplayEvent.command(4*SECOND, 'Hunter', SHOT,
@@ -197,6 +202,7 @@ class TclShotFeedbackTests(unittest.TestCase):
             # Existing schema 22 checkpoint remains authoritative.
             raw=json.loads(store.path.read_text());raw['schema']=22
             del raw['state']['bread_policy_version']
+            del raw['state']['pending_identity_transfers']
             body = {key:value for key,value in raw.items() if key != 'checksum'}
             raw['checksum']=hashlib.sha256(canonical_json_bytes(body)).hexdigest()
             store.path.write_bytes(canonical_json_bytes(raw)+b'\n')

@@ -19,6 +19,14 @@ from pyduckhunt.game.engine import (
     start_flight,
 )
 from pyduckhunt.game.inventory import add_item, item_quantity, remove_item
+from pyduckhunt.game.identity_transfer import (
+    PENDING_IDENTITY_TRANSFER_TTL_NS,
+    cancel_pending_identity_transfer,
+    pending_identity_transfer,
+    resolve_pending_identity_transfer,
+    should_track_nick_change,
+    track_nick_change,
+)
 from pyduckhunt.game.karma import (
     KARMA_DECAY_PERIOD_NS,
     KARMA_DECAY_STEP_BASIS_POINTS,
@@ -107,6 +115,7 @@ from pyduckhunt.game.model import (
     LootAward,
     Outcome,
     OutcomeKind,
+    PendingIdentityTransfer,
     PlayerState,
     ScheduledAction,
     ThrottleWindow,
@@ -160,6 +169,8 @@ __all__ = [
     "LevelPolicy",
     "Outcome",
     "OutcomeKind",
+    "PendingIdentityTransfer",
+    "PENDING_IDENTITY_TRANSFER_TTL_NS",
     "PlayerState",
     "ScheduledAction",
     "ThrottleWindow",
@@ -197,6 +208,7 @@ __all__ = [
     "build_daily_schedule",
     "community_hunt_progress",
     "calculate_karma_basis_points",
+    "cancel_pending_identity_transfer",
     "adjust_karma_modifier",
     "decay_karma_modifier",
     "karma_adjusted_jam_basis_points",
@@ -216,10 +228,12 @@ __all__ = [
     "late_shot_delay_ms",
     "milestone_credit",
     "parse_command",
+    "pending_identity_transfer",
     "player_karma_basis_points",
     "player_base_karma_basis_points",
     "purchase",
     "remove_item",
+    "resolve_pending_identity_transfer",
     "select_standard_loot",
     "standard_loot_threshold",
     "select_runtime_loot",
@@ -230,6 +244,7 @@ __all__ = [
     "reward_effect",
     "promotion_discount_percent",
     "settled_shop_cost",
+    "should_track_nick_change",
     "validate_active_effect",
     "validate_active_curse",
     "validate_flight_reward",
@@ -240,5 +255,6 @@ __all__ = [
     "validate_throttle_window",
     "validate_reward_effect",
     "start_flight",
+    "track_nick_change",
     "flight_reward",
 ]

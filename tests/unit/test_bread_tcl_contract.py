@@ -208,6 +208,7 @@ class BreadRuleTests(unittest.TestCase):
             raw = json.loads(store.path.read_text())
             raw['schema'] = 23
             raw['state'].pop('bread_policy_version')
+            raw['state'].pop('pending_identity_transfers')
             raw.pop('checksum')
             raw['checksum'] = hashlib.sha256(canonical_json_bytes(raw)).hexdigest()
             store.path.write_bytes(canonical_json_bytes(raw) + b'\n')

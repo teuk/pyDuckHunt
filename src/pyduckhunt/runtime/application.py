@@ -16,6 +16,10 @@ from pyduckhunt.game.commands import (
     parse_command,
     validate_command,
 )
+from pyduckhunt.game.identity_transfer import (
+    pending_identity_transfer,
+    should_track_nick_change,
+)
 from pyduckhunt.game.model import GameState, OutcomeKind, Transition
 from pyduckhunt.identity import rfc1459_casefold, same_irc_name
 from pyduckhunt.irc.message import IRCMessage
@@ -28,7 +32,11 @@ from pyduckhunt.rendering.responses import (
     render_wire_notice,
     render_wire_response,
 )
-from pyduckhunt.runtime.orchestrator import DispatchResult, RuntimeOrchestrator
+from pyduckhunt.runtime.orchestrator import (
+    DispatchResult,
+    DispatchStatus,
+    RuntimeOrchestrator,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +154,65 @@ class IRCGameBridge:
         self._owner_thread = threading.get_ident()
 
     @localized_method
+    def observe_identity(self, now_ns: int, message: IRCMessage) -> BridgeResult:
+        """Persist reference-compatible NICK, PART and QUIT identity facts."""
+
+        self._ensure_owner()
+        self._accept_now(now_ns)
+        if not isinstance(message, IRCMessage):
+            raise ValueError("IRC game bridge requires a parsed IRC message")
+        nickname = message.nickname
+        event: ReplayEvent | None = None
+        if (
+            message.command == "NICK"
+            and nickname is not None
+            and len(message.params) == 1
+            and should_track_nick_change(
+                self.runtime.state,
+                nickname,
+                message.params[0],
+            )
+        ):
+            event = ReplayEvent.track_nick_change(
+                now_ns,
+                nickname,
+                message.params[0],
+            )
+        elif (
+            message.command == "QUIT"
+            and nickname is not None
+            and pending_identity_transfer(self.runtime.state, nickname) is not None
+        ):
+            event = ReplayEvent.cancel_nick_transfer(now_ns, nickname)
+        elif (
+            message.command == "PART"
+            and nickname is not None
+            and message.params
+            and rfc1459_casefold(message.params[0]) in self._canonical_channels
+            and pending_identity_transfer(self.runtime.state, nickname) is not None
+        ):
+            event = ReplayEvent.cancel_nick_transfer(now_ns, nickname)
+        if event is None:
+            return BridgeResult(BridgeStatus.IGNORED)
+
+        def renderer(transition: Transition) -> tuple[bytes, ...]:
+            return tuple(
+                wire
+                for channel in self.channels
+                for wire in render_wire_response(
+                    channel,
+                    render_outcomes(transition.outcomes, channel=channel),
+                )
+            )
+
+        dispatch = self.runtime.dispatch(event, renderer)
+        return BridgeResult(
+            BridgeStatus.DISPATCHED,
+            dispatch=dispatch,
+            priority_batch=dispatch.priority_batch,
+        )
+
+    @localized_method
     def handle(self, now_ns: int, message: IRCMessage) -> BridgeResult:
         """Handle one ready transport message without reading clocks or entropy."""
 
@@ -183,6 +250,23 @@ class IRCGameBridge:
             )
 
         context = IRCCommandContext(now_ns, nickname, channel, command)
+        busy = _render_command_response(
+            command,
+            nickname,
+            channel,
+            (tr('{0} > Service occupé ; réessaie dans un instant.', nickname),),
+        )
+        identity_backpressure = self._resolve_pending_identities(
+            context,
+            backpressure_response=busy,
+        )
+        if identity_backpressure is not None:
+            return BridgeResult(
+                BridgeStatus.DISPATCHED,
+                command=command,
+                dispatch=identity_backpressure,
+                priority_batch=identity_backpressure.priority_batch,
+            )
         try:
             event = self._event_resolver(self.runtime.state, context)
         except EventResolutionError as error:
@@ -221,12 +305,6 @@ class IRCGameBridge:
             )
             return _render_command_response(command, nickname, channel, lines)
 
-        busy = _render_command_response(
-            command,
-            nickname,
-            channel,
-            (tr('{0} > Service occupé ; réessaie dans un instant.', nickname),),
-        )
         dispatch = self.runtime.dispatch(
             event,
             renderer,
@@ -238,6 +316,47 @@ class IRCGameBridge:
             dispatch=dispatch,
             priority_batch=dispatch.priority_batch,
         )
+
+    def _resolve_pending_identities(
+        self,
+        context: IRCCommandContext,
+        *,
+        backpressure_response: tuple[bytes, ...],
+    ) -> DispatchResult | None:
+        candidates = [context.nickname]
+        if context.command.kind in (CommandKind.STATS, CommandKind.INVENTORY):
+            if len(context.command.arguments) == 1:
+                candidates.append(context.command.arguments[0])
+        elif context.command.kind is CommandKind.SHOP:
+            if len(context.command.arguments) == 2:
+                candidates.append(context.command.arguments[1])
+
+        seen: set[str] = set()
+        for nickname in candidates:
+            key = rfc1459_casefold(nickname)
+            if key in seen:
+                continue
+            seen.add(key)
+            if pending_identity_transfer(self.runtime.state, nickname) is None:
+                continue
+
+            def renderer(transition: Transition) -> tuple[bytes, ...]:
+                return render_wire_response(
+                    context.channel,
+                    render_outcomes(
+                        transition.outcomes,
+                        channel=context.channel,
+                    ),
+                )
+
+            dispatch = self.runtime.dispatch(
+                ReplayEvent.resolve_nick_transfer(context.now_ns, nickname),
+                renderer,
+                backpressure_response=backpressure_response,
+            )
+            if dispatch.status is DispatchStatus.BACKPRESSURED:
+                return dispatch
+        return None
 
     def _accept_now(self, now_ns: int) -> None:
         if type(now_ns) is not int or now_ns < 0:

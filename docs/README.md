@@ -11,6 +11,7 @@ Use `./install.sh --language fr` for French. Both instances use the same game en
 | [Configuration](CONFIGURATION.md) · [Languages](LANGUAGES.md) | Private settings and independent FR/EN instances |
 | [Troubleshooting](TROUBLESHOOTING.md) | Installation, connection, messages and recovery problems |
 | [Player profiles](PLAYER_PROFILE.md) · [Shot engine](SHOT_ENGINE.md) | Progression, fatigue, accuracy and shooting |
+| [Nickname transfers](NICKNAME_TRANSFERS.md) | Deferred rename, merge, cancellation and replay rules |
 | [Shop](SHOP.md) · [Channel items](CHANNEL_ACTIONS.md) | Equipment, bread and duck calls |
 | [Collection and carry](COLLECTION_AND_CARRY.md) | Letters, duck bags and capacity |
 | [Rare events](RARE_EVENTS.md) · [Legendary protection](LEGENDARY_PROTECTION.md) | Unusual ducks, loot and protection |

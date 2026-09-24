@@ -67,6 +67,15 @@ fails queued tickets and prevents further admission. See
 
 ## Prerelease schema
 
+Schema 25 adds bounded pending nickname transfers and exact track, resolve and
+cancel replay events. A tracked IRC rename remains inert until participation
+under its destination nickname. Resolution then renames or merges the profile
+and rekeys live references atomically. Returning to the source, leaving the
+configured channel, quitting or reaching the one-hour deadline removes the
+pending transfer. Schema-24 and older snapshots decode with no pending
+transfers; their game state and journal bytes are unchanged. See
+`docs/NICKNAME_TRANSFERS.md`.
+
 Schema 21 adds `admin_channel_item` events for owner-provided bread and duck
 calls. They preserve the authenticated owner handle, exact shop item and the
 already-drawn call deadline, while deliberately carrying no player identity or
