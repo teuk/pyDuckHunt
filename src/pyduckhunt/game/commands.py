@@ -12,6 +12,7 @@ class CommandKind(str, Enum):
     SHOT = "shot"
     RELOAD = "reload"
     SHOP = "shop"
+    SHOP_INFO = "shop_info"
     INVENTORY = "inventory"
     STATS = "stats"
     LAST_FLIGHT = "last_flight"
@@ -49,6 +50,7 @@ _USAGE = {
     CommandKind.SHOT: "!bang",
     CommandKind.RELOAD: "!reload",
     CommandKind.SHOP: "!shop [id [cible]]",
+    CommandKind.SHOP_INFO: "!shop info <id>",
     CommandKind.INVENTORY: "!inventory [nick]",
     CommandKind.STATS: "!duckstats [nick]",
     CommandKind.LAST_FLIGHT: "!lastduck",
@@ -85,6 +87,14 @@ def validate_command(command: Command, *, maximum_rank_limit: int = 20) -> Comma
         if arguments:
             valid = valid and arguments[0].isascii() and arguments[0].isdigit()
             valid = valid and int(arguments[0]) > 0
+    elif command.kind is CommandKind.SHOP_INFO:
+        valid = (
+            len(arguments) == 1
+            and arguments[0].isascii()
+            and arguments[0].isdigit()
+            and len(arguments[0]) <= 4
+            and int(arguments[0]) > 0
+        )
     elif command.kind is CommandKind.RANK:
         rank_arguments = arguments[1:] if arguments and arguments[0].casefold() == "hits" else arguments
         valid = len(rank_arguments) <= 1
@@ -126,4 +136,10 @@ def parse_command(text: str, *, prefix: str = "!") -> Command | None:
     kind = _ALIASES.get(invoked_as)
     if kind is None:
         return None
+    if kind is CommandKind.SHOP and len(words) > 1 and words[1].casefold() == "info":
+        return Command(
+            kind=CommandKind.SHOP_INFO,
+            invoked_as=invoked_as,
+            arguments=tuple(words[2:]),
+        )
     return Command(kind=kind, invoked_as=invoked_as, arguments=tuple(words[1:]))

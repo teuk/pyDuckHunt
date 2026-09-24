@@ -138,7 +138,7 @@ def render_ranking_page(
         '      <nav class="primary-nav" aria-label="Navigation principale"><a '
         'href="/">Accueil</a><a href="/#mediabot">Mediabot</a><a '
         'href="/DuckHunt/">DuckHunt</a><a href="/#connexion">Connexion</a></nav>\n'
-        '      <div class="header-status"><i></i><span>Coin en ligne</span></div>\n'
+        '      <div class="header-status"><span>Classement DuckHunt</span></div>\n'
         '    </div>\n'
         '  </header>\n'
         '  <div class="duckhunt-subnav">\n'

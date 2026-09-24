@@ -79,6 +79,24 @@ class CommandParserTests(unittest.TestCase):
             with self.assertRaises(CommandSyntaxError):
                 validate_command(command)
 
+    def test_shop_info_is_a_read_only_distinct_command_with_bounded_id(self) -> None:
+        for text in ("!shop info 1", "!shop INFO 21", "!shop info 9999"):
+            command = parse_command(text)
+            assert command is not None
+            self.assertIs(command.kind, CommandKind.SHOP_INFO)
+            self.assertIs(validate_command(command), command)
+            self.assertEqual(command_usage(command), "!shop info <id>")
+        for text in ("!shop info", "!shop info 0", "!shop info x", "!shop info 21 Alice",
+                     "!shop info 10000", "!shop info ٢١"):
+            command = parse_command(text)
+            assert command is not None
+            self.assertIs(command.kind, CommandKind.SHOP_INFO)
+            with self.assertRaises(CommandSyntaxError):
+                validate_command(command)
+        purchase = parse_command("!shop 21")
+        assert purchase is not None
+        self.assertIs(purchase.kind, CommandKind.SHOP)
+
     def test_rank_limit_defaults_and_accepts_observed_boundary(self) -> None:
         default_command = parse_command("!duckrank")
         boundary_command = parse_command("!duckrank 20")

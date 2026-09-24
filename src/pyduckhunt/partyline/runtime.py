@@ -33,7 +33,7 @@ from pyduckhunt.game.model import (
     Transition,
 )
 from pyduckhunt.game.progression import experience_required
-from pyduckhunt.game.ranking import is_statistically_excluded, ranked_players
+from pyduckhunt.game.ranking import RankingCriterion, is_statistically_excluded, ranked_players
 from pyduckhunt.game.runtime import DAY_NS
 from pyduckhunt.game.targets import flight_reward
 from pyduckhunt.identity import rfc1459_casefold, same_irc_name
@@ -520,11 +520,12 @@ class PartylineController:
                 f"nick={_safe_atom(message.nickname)} command={_safe_atom(command)}"
             )
             return
-        if len(arguments) != 1:
-            usage = "duckplanning" if private else "!duckplanning"
+        next_only = len(arguments) == 2 and arguments[1].casefold() == "next"
+        if len(arguments) != 1 and not next_only:
+            usage = "duckplanning [next]" if private else "!duckplanning [next]"
             lines = (tr('{0} > Usage : {1}', owner.handle, usage),)
         else:
-            lines = self._duckplanning_lines(now_ns)
+            lines = self._duckplanning_lines(now_ns, next_only=next_only)
         self.runtime.emit_priority(
             tuple(render_notice_bounded(message.nickname, line) for line in lines)
         )
@@ -1423,7 +1424,7 @@ class PartylineController:
             self._close_session(session, "quit")
         elif command == ".help":
             for help_line in _HELP_LINES:
-                self._queue_line(session, help_line)
+                self._queue_line(session, tr(help_line))
         elif command == ".passwd" and len(arguments) == 1:
             session.stage = "change-password"
             session.pending_password = None
@@ -1445,9 +1446,25 @@ class PartylineController:
         elif command == ".game":
             for game_line in self._game_lines(now_ns):
                 self._queue_line(session, game_line)
-        elif command == ".duckplanning" and len(arguments) == 1:
-            for planning_line in self._duckplanning_lines(now_ns):
+        elif command == ".duckplanning" and (
+            len(arguments) == 1
+            or (len(arguments) == 2 and arguments[1].casefold() == "next")
+        ):
+            for planning_line in self._duckplanning_lines(
+                now_ns, next_only=len(arguments) == 2,
+            ):
                 self._queue_line(session, planning_line)
+        elif command == ".top" and (
+            len(arguments) == 1
+            or (len(arguments) == 2 and arguments[1].casefold() in ("xp", "hits"))
+        ):
+            criterion = (
+                RankingCriterion.HITS
+                if len(arguments) == 2 and arguments[1].casefold() == "hits"
+                else RankingCriterion.EXPERIENCE
+            )
+            for top_line in self._top_lines(criterion):
+                self._queue_line(session, top_line)
         elif command == ".summary" and len(arguments) == 1:
             for summary_line in self._summary_lines():
                 self._queue_line(session, summary_line)
@@ -1769,7 +1786,7 @@ class PartylineController:
             f"State: players={len(state.players)} effects={len(state.effects)} actions={len(state.scheduled_actions)} curses={len(state.curses)}",
         )
 
-    def _duckplanning_lines(self, now_ns: int) -> tuple[str, ...]:
+    def _duckplanning_lines(self, now_ns: int, *, next_only: bool = False) -> tuple[str, ...]:
         state = self.runtime.state
         _, _, _, joined_channels = self._network_status()
         channel = ",".join(joined_channels) if joined_channels else tr('aucun canal')
@@ -1789,17 +1806,18 @@ class PartylineController:
                 f"{schedule.next_index}/{len(schedule.deadlines_ns)} "
                 + tr('créneaux traités.')
             )
-            entries = tuple(
-                f"{index + 1:02d}{'✓' if index < schedule.next_index else '→' if index == schedule.next_index else '·'}"
-                f"{_paris(deadline)}"
-                for index, deadline in enumerate(schedule.deadlines_ns)
-            )
-            for offset in range(0, len(entries), 6):
-                first = offset + 1
-                last = min(offset + 6, len(entries))
-                lines.append(
-                    tr('Vols {0:02d}-{1:02d}: ', first, last) + " | ".join(entries[offset:last])
+            if not next_only:
+                entries = tuple(
+                    f"{index + 1:02d}{'✓' if index < schedule.next_index else '→' if index == schedule.next_index else '·'}"
+                    f"{_paris(deadline)}"
+                    for index, deadline in enumerate(schedule.deadlines_ns)
                 )
+                for offset in range(0, len(entries), 6):
+                    first = offset + 1
+                    last = min(offset + 6, len(entries))
+                    lines.append(
+                        tr('Vols {0:02d}-{1:02d}: ', first, last) + " | ".join(entries[offset:last])
+                    )
 
         actions = tuple(
             sorted(
@@ -1842,6 +1860,8 @@ class PartylineController:
             + (tr('aucun pain disponible.') if not active_breads else
                tr('le prochain envol consomme un morceau et reste 20s de plus.'))
         )
+        if next_only:
+            return tuple(lines)
         for action in actions:
             source = state.player(action.source_key or "")
             actor = "Owner" if source is None else source.nickname
@@ -1860,6 +1880,18 @@ class PartylineController:
             lines.append(tr('Expiration des pains: {0}.', expirations))
         lines.append(tr('Légende: ✓ traité | → prochain quotidien | · à venir.'))
         return tuple(lines)
+
+    def _top_lines(self, criterion: RankingCriterion) -> tuple[str, ...]:
+        return tuple(
+            _plain_irc(line)
+            for line in render_ranking(
+                self.runtime.state,
+                limit=5,
+                ranking_url=self._ranking_url,
+                excluded_nicknames=self._statistics_excluded_nicknames,
+                criterion=criterion,
+            )
+        )
 
     def _summary_lines(self) -> tuple[str, ...]:
         state = self.runtime.state
@@ -2369,7 +2401,9 @@ _HELP_LINES = (
     tr('.dccstat                        IP, ports, offres et sessions DCC'),
     tr('.game                           vol, planning et état DuckHunt'),
     tr('.duckplanning                   les 24 horaires, attractions et appeaux'),
+    tr('.duckplanning next              le prochain événement et les compteurs'),
     tr('.summary                        top 5, profils, inventaires et dernier tireur'),
+    tr('.top [xp|hits]                  top 5 sans profils ni inventaires'),
     tr('.duck [#canal]                 lance un canard sans déplacer le planning'),
     tr('.goldenduck [#canal]           lance un canard doré (alias : .golden)'),
     tr('.who                            opérateurs connectés'),

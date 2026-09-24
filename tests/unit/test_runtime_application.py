@@ -225,6 +225,23 @@ class IRCGameBridgeTests(unittest.TestCase):
         ranked.dispatch.persistence_ticket.wait(2)
         self.assertEqual(self.journal.read_records()[0].event.arguments, ('hits', '2'))
 
+    def test_shop_preview_never_purchases_creates_hunter_or_writes_journal(self) -> None:
+        for language in ("fr", "en"):
+            bridge = IRCGameBridge(self.runtime, ("#pond",), resolved_event, language=language)
+            for command, expected_status in (("!shop info 21", BridgeStatus.DISPATCHED),
+                                             ("!shop info 999", BridgeStatus.DISPATCHED),
+                                             ("!shop info", BridgeStatus.INVALID)):
+                with self.subTest(language=language, command=command):
+                    initial = self.runtime.state
+                    result = bridge.handle(1, self.message(command, nickname="Visitor"))
+                    self.assertEqual(result.status, expected_status)
+                    self.assertIsNone(result.dispatch)
+                    self.assertTrue(result.priority_batch)
+                    self.assertTrue(all(wire.startswith(b"NOTICE Visitor :")
+                                        for wire in result.priority_batch))
+                    self.assertEqual(self.runtime.state, initial)
+                    self.assertEqual(self.journal.read_records(), ())
+
     def test_private_help_and_personal_rank_syntax_errors_do_not_hit_channel(self) -> None:
         for command in ('!myrank Other', '!duckhelp now'):
             with self.subTest(command=command):

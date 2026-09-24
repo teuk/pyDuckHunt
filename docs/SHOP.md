@@ -4,6 +4,10 @@ The shop is split into catalog, pricing and settlement. The observed 1–31
 surface now has explicit nominal prices and deterministic boundaries.
 
 Nominal prices follow the retained Duck Hunt 2.11 shop reference table.
+Players can inspect an item with `!shop info <id>`: one private NOTICE shows
+the catalog price, scope and relevant limits without buying it. The displayed
+price is nominal; credits and promotions are calculated at the actual purchase
+with the existing `!shop <id> [target]` command.
 
 ## Supported catalog slice
 

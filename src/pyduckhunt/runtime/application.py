@@ -267,7 +267,7 @@ class IRCGameBridge:
                 dispatch=identity_backpressure,
                 priority_batch=identity_backpressure.priority_batch,
             )
-        if command.kind in (CommandKind.MY_RANK, CommandKind.HELP):
+        if command.kind in (CommandKind.MY_RANK, CommandKind.HELP, CommandKind.SHOP_INFO):
             lines = render_query(
                 self.runtime.state,
                 nickname,
@@ -429,7 +429,8 @@ def _render_command_response(
     lines: tuple[str, ...],
 ) -> tuple[bytes, ...]:
     private_query = command.kind in (
-        CommandKind.STATS, CommandKind.INVENTORY, CommandKind.MY_RANK, CommandKind.HELP,
+        CommandKind.STATS, CommandKind.INVENTORY, CommandKind.MY_RANK,
+        CommandKind.HELP, CommandKind.SHOP_INFO,
     ) or (
         command.kind is CommandKind.SHOP and not command.arguments
     )

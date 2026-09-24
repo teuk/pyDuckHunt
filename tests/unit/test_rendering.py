@@ -32,10 +32,12 @@ from pyduckhunt.rendering import (
     render_query,
     render_ranking,
     render_shop,
+    render_shop_info,
     render_wire_notice,
     render_wire_response,
 )
 from pyduckhunt.time_format import format_duration_ns
+from pyduckhunt.rendering.responses import render_help
 
 
 def player(nickname: str, **changes: object) -> PlayerState:
@@ -65,6 +67,35 @@ class ResponseRenderingTests(unittest.TestCase):
         )
         self.bob = player("Bob", hits=20, best_time_ms=2500)
         self.state = GameState(players=(self.alice, self.bob))
+
+    def test_shop_preview_covers_catalog_prices_and_fits_private_notice(self) -> None:
+        self.assertEqual(len(SHOP_CATALOG), 31)
+        for language, marker in (("fr", "prix nominal :"), ("en", "base price:")):
+            for item in SHOP_CATALOG:
+                with self.subTest(language=language, item=item.item_id):
+                    line, = render_shop_info(item.item_id, language=language)
+                    self.assertIn(f"{marker} {item.base_cost} xp", line)
+                    self.assertIn(f"!shop {item.item_id}", line)
+                    wires = render_wire_notice("Hunter", (line,))
+                    self.assertEqual(len(wires), 1)
+                    self.assertLessEqual(len(wires[0]), 512)
+                    self.assertNotIn(b"\xe2\x80\xa6", wires[0])
+        self.assertIn("cible requise", render_shop_info(16)[0])
+        self.assertIn("une attraction", render_shop_info(21)[0])
+        self.assertIn("call scheduled", render_shop_info(20, language="en")[0])
+        self.assertIn("takeoff scheduled", render_shop_info(23, language="en")[0])
+        self.assertIn("inconnu", render_shop_info(9999)[0])
+        self.assertIn("unknown", render_shop_info(9999, language="en")[0])
+
+    def test_help_retains_purchase_syntax_and_adds_private_preview(self) -> None:
+        for language, purchase in (("fr", "!shop <id> [cible] : acheter"),
+                                   ("en", "!shop <id> [target]: buy")):
+            lines = render_help(language=language)
+            self.assertIn(purchase, lines[0])
+            self.assertIn("!shop info <id>", lines[0])
+            wires = render_wire_notice("Hunter", lines)
+            self.assertTrue(all(len(wire) <= 512 for wire in wires))
+            self.assertNotIn(b"\xe2\x80\xa6", b" ".join(wires))
 
     def test_profile_is_the_complete_two_line_hunting_sheet(self) -> None:
         lines = render_profile(self.state, "alice")

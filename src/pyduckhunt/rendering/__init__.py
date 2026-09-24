@@ -22,6 +22,7 @@ from pyduckhunt.rendering.responses import (
     render_query,
     render_ranking,
     render_shop,
+    render_shop_info,
     render_wire_notice,
     render_wire_response,
 )
@@ -45,6 +46,7 @@ __all__ = (
     "render_query",
     "render_ranking",
     "render_shop",
+    "render_shop_info",
     "render_wire_notice",
     "render_wire_response",
 )

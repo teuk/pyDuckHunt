@@ -780,6 +780,69 @@ class PartylineRuntimeTests(unittest.TestCase):
         self.assertIn(b"Pains=", automatic)
         self.assertEqual(len(self.wires), before)
 
+    def test_compact_owner_plan_and_partyline_top_preserve_default_and_state(self) -> None:
+        dcc = self._bootstrap_over_offered_dcc("compact owner planning password")
+        self.runtime._state = GameState(
+            daily_schedule=DailySchedule(
+                day_start_ns=0,
+                deadlines_ns=tuple((index + 1) * 3_600_000_000_000 for index in range(24)),
+                next_index=9,
+            ),
+            players=(
+                PlayerState("ace", "Ace", level=2, experience=4, hits=1),
+                PlayerState("hunter", "Hunter", hits=3, golden_hits=1),
+            ),
+        )
+        initial = self.runtime.state
+        for target, text in (("#marsh", "!duckplanning next"),
+                             ("Coin", "duckplanning next")):
+            with self.subTest(target=target):
+                before = len(self.wires)
+                message = parse_irc_line(
+                    f"@account=Operator :ChangedNick!elsewhere@changed PRIVMSG {target} :{text}"
+                )
+                self.assertTrue(self.controller.handle_irc(20, message, "Coin"))
+                replies = tuple(wire for batch in self.wires[before:] for wire in batch)
+                self.assertEqual(len(replies), 3)
+                self.assertTrue(all(wire.startswith(b"NOTICE ChangedNick :") for wire in replies))
+                body = b" ".join(replies)
+                self.assertIn(b"Prochain quotidien=", body)
+                self.assertIn(b"Pains=", body)
+                self.assertNotIn(b"Vols 01-06", body)
+
+        before = len(self.wires)
+        impostor = parse_irc_line(
+            "@account=Other :ChangedNick!elsewhere@changed PRIVMSG #marsh :!duckplanning next"
+        )
+        self.assertTrue(self.controller.handle_irc(21, impostor, "Coin"))
+        self.assertEqual(len(self.wires), before)
+
+        for command, first, second in ((b".top\n", b"Ace", b"Hunter"),
+                                       (b".top xp\n", b"Ace", b"Hunter"),
+                                       (b".top hits\n", b"Hunter", b"Ace")):
+            with self.subTest(command=command):
+                dcc.sendall(command)
+                self._poll_twice(22)
+                output = drain(dcc)
+                self.assertIn(b"[TOP 5", output)
+                self.assertLess(output.index(first), output.index(second))
+                self.assertNotIn(b"[Profil]", output)
+                self.assertNotIn(b"[Inventaire]", output)
+                self.assertNotIn(b"\x03", output)
+
+        dcc.sendall(b".duckplanning next\n")
+        self._poll_twice(23)
+        compact = drain(dcc)
+        self.assertIn(b"Pains=", compact)
+        self.assertNotIn(b"Vols 01-06", compact)
+        dcc.sendall(b".duckplanning\n")
+        self._poll_twice(24)
+        full = drain(dcc)
+        self.assertIn(b"Vols 01-06", full)
+        self.assertIn(b"Vols 19-24", full)
+        self.assertEqual(self.runtime.state, initial)
+        self.assertEqual(self.journal.read_records(), ())
+
     def test_manual_launch_requires_an_unambiguous_joined_channel(self) -> None:
         dcc = self._bootstrap_over_offered_dcc("one more private password")
         self.controller._network_status = lambda: (

@@ -34,6 +34,7 @@ EN = {
     '!lastduck': '!lastduck',
     '!reload': '!reload',
     '!shop [id [cible]]': '!shop [id [target]]',
+    '!shop info <id>': '!shop info <id>',
     '#{0} fin={1}': '#{0} ends={1}',
     '*sifflote*': '*whistle*',
     '+{0} fatigue': '+{0} fatigue',
@@ -41,6 +42,8 @@ EN = {
     '.dccstat                        IP, ports, offres et sessions DCC': '.dccstat                        IP, ports, offers and DCC sessions',
     '.duck [#canal]                 lance un canard sans déplacer le planning': '.duck [#channel]                launch a duck without moving the schedule',
     '.duckplanning                   les 24 horaires, attractions et appeaux': '.duckplanning                   all 24 times, attractions and calls',
+    '.duckplanning next              le prochain événement et les compteurs': '.duckplanning next              next event and counts',
+    '.top [xp|hits]                  top 5 sans profils ni inventaires': '.top [xp|hits]                  top 5 without profiles or inventories',
     '.fields                         champs acceptés par .setplayer': '.fields                         fields accepted by .setplayer',
     '.game                           vol, planning et état DuckHunt': '.game                           flight, schedule and DuckHunt state',
     '.giveammo <nick> [n]            donne 1 à 100 munitions, sans dépasser la capacité': '.giveammo <nick> [n]             give 1 to 100 bullets, within capacity',
@@ -88,7 +91,7 @@ EN = {
         '      <nav class="primary-nav" aria-label="Navigation principale"><a '
         'href="/">Accueil</a><a href="/#mediabot">Mediabot</a><a '
         'href="/DuckHunt/">DuckHunt</a><a href="/#connexion">Connexion</a></nav>\n'
-        '      <div class="header-status"><i></i><span>Coin en ligne</span></div>\n'
+        '      <div class="header-status"><span>Classement DuckHunt</span></div>\n'
         '    </div>\n'
         '  </header>\n'
         '  <div class="duckhunt-subnav">\n'
@@ -160,7 +163,7 @@ EN = {
         '      <nav class="primary-nav" aria-label="Main navigation"><a href="/">Home</a><a '
         'href="/#mediabot">Mediabot</a><a href="/DuckHunt/">DuckHunt</a><a '
         'href="/#connexion">Connect</a></nav>\n'
-        '      <div class="header-status"><i></i><span>Coin online</span></div>\n'
+        '      <div class="header-status"><span>DuckHunt rankings</span></div>\n'
         '    </div>\n'
         '  </header>\n'
         '  <div class="duckhunt-subnav">\n'
@@ -285,6 +288,17 @@ EN = {
     ),
     'Boutique: !shop [id [cible]]': 'Shop: !shop [id [target]]',
     'Boutique: {0} | !shop [id [cible]]': 'Shop: {0} | !shop [id [target]]',
+    'Boutique : objet #{0} inconnu.': 'Shop: unknown item #{0}.',
+    'prix nominal : {0} xp': 'base price: {0} xp',
+    'sur le canal': 'for the channel',
+    'pour un joueur': 'for a player',
+    'cible requise': 'target required',
+    "jusqu'à {0}": 'up to {0}',
+    '{0} utilisations': '{0} uses',
+    'appel prévu sous 10mn, reportable si un canard vole': 'call scheduled within 10 minutes, deferred during a flight',
+    'une attraction ; le prochain envol consomme un morceau et dure 20s de plus': 'one attraction; the next takeoff consumes one piece and lasts 20s longer',
+    'envol prévu dans 10mn, reportable si un canard vole': 'takeoff scheduled in 10 minutes, deferred during a flight',
+    '{0}[Boutique #{1}]{2} {3} | {4} | !shop {1} pour acheter': '{0}[Shop #{1}]{2} {3} | {4} | !shop {1} to buy',
     'COIN': 'QUACK',
     'COUAAAAC': 'QUAAAAC',
     'COUAAAACK': 'QUAAAACK',
@@ -854,7 +868,7 @@ EN = {
     '{0}[TOP {1} CANARDS]{2}': '{0}[TOP {1} DUCKS]{2}',
     '{0}[TOP {1} CANARDS]{2} Aucun chasseur classé.': '{0}[TOP {1} DUCKS]{2} No ranked hunters.',
     '{0}[Mon rang]{1} {2} | XP disponibles : {3}/{4} ({5} xp) | canards : {6}/{4} ({7}, dont {8} {9})': '{0}[My rank]{1} {2} | Available XP: {3}/{4} ({5} xp) | Ducks: {6}/{4} ({7}, including {8} {9})',
-    '{0}[Aide DuckHunt]{1} !bang / !pan : tirer | !reload : recharger | !shop : catalogue, !shop <id> [cible] : acheter': '{0}[DuckHunt help]{1} !bang / !pan: shoot | !reload: reload | !shop: catalog, !shop <id> [target]: buy',
+    '{0}[Aide DuckHunt]{1} !bang / !pan : tirer | !reload : recharger | !shop : catalogue, !shop <id> [cible] : acheter | !shop info <id> : détails': '{0}[DuckHunt help]{1} !bang / !pan: shoot | !reload: reload | !shop: catalog, !shop <id> [target]: buy | !shop info <id>: item details',
     '!duckstats [nick] : profil | !inventory [nick] : équipement | !lastduck : dernier vol': '!duckstats [nick]: profile | !inventory [nick]: gear | !lastduck: last flight',
     '!duckrank [limite] : XP | !duckrank hits [limite] : canards | !myrank : mon rang | !duckhelp : cette aide': '!duckrank [limit]: XP | !duckrank hits [limit]: ducks | !myrank: my rank | !duckhelp: this help',
     '{0}[Inventaire]{1} arme: {2}{3} | mun.: {4}/{5} | charg.: {6} | {7} {8} {9}{10} | lettres: {11}': '{0}[Inventory]{1} weapon: {2}{3} | ammo: {4}/{5} | clips: {6} | {7} {8} {9}{10} | letters: {11}',

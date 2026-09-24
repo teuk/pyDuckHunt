@@ -103,6 +103,8 @@ Useful read-only commands are:
 .status
 .dccstat
 .game
+.duckplanning [next]
+.top [xp|hits]
 .summary
 .duck [#channel]
 .goldenduck [#channel]
@@ -121,6 +123,11 @@ profile and inventory of each ranked player. It appends the same two views for
 the last player whose shot actually fired. IRC colour controls are removed for
 clean DCC and Telnet output; with one joined channel, inventory also names its
 active bread count for that channel.
+`.top` shows the same top-five XP ranking without profiles or inventories;
+`.top hits` uses the existing ducks-hit order and `.top xp` spells out the
+default. `.summary` keeps its complete output. `.duckplanning next` shows only
+the next daily time, next runtime event, active flight and bread/action counts;
+the default `.duckplanning` still lists all 24 daily slots and pending actions.
 
 `.duck` starts one standard duck and `.goldenduck` (alias `.golden`) starts one
 golden duck with the same calibrated three-to-five health and reward rules as
@@ -191,6 +198,7 @@ currently joined to:
 !bread
 !duckcall
 !duckplanning
+!duckplanning next
 ```
 
 The weapon controls are also available by private message, without the public-command
@@ -230,16 +238,19 @@ flight. Channel observers receive no administrative item acknowledgement.
 Player purchases `!shop 20` and `!shop 21` retain public gameplay confirmations.
 An appeau reports only an approximate ten-minute window, as in Tcl 2.11; it never
 reveals a timestamp or the daily schedule. Bread reports its one-hour maximum,
-one attraction and one-flight consumption; the takeoff emits the ordinary bread
-consumption line. Inventory and catalog queries remain private notices without
+one attraction and one-flight consumption; takeoff consumes bread silently.
+Inventory and catalog queries remain private notices without
 exposing pending call or attraction deadlines.
 
 `!duckplanning` is accepted only from the registered Owner in a joined channel
 and always answers privately by NOTICE. `/msg Coin duckplanning` provides the
 same private view. It lists every daily flight in Europe/Paris time, the daily
 cursor, next runtime event, active flight, bread attractions/expirations and every
-pending duck call. The partyline command `.duckplanning` renders the same view. Coin
-also broadcasts the refreshed view to authenticated partyline sessions whenever
+pending duck call. The partyline command `.duckplanning` renders the same view.
+The Owner may request `!duckplanning next` or `/msg Coin duckplanning next` for
+the next event and counts in three private NOTICE lines; partyline operators
+can request `.duckplanning next` for the compact view. Coin also broadcasts the
+refreshed full view to authenticated partyline sessions whenever
 the durable bread or channel-action set changes.
 
 The same owner identity may launch a flight privately:

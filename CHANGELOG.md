@@ -5,6 +5,12 @@ these changes do not create a stable release or a tag.
 
 ## 0.2.0-dev — Unreleased
 
+- Add private, read-only `!shop info <id>` with catalog name, nominal XP price,
+  scope and limits; keep existing purchase settlement unchanged.
+- Add partyline `.top [xp|hits]` and compact `.duckplanning next`, plus Owner
+  `!duckplanning next` in channel or private message. Full views remain available.
+- Remove the live IRC status claim from the static ranking header and correct
+  partyline documentation: bread consumption at takeoff is silent.
 - Add opt-in `!duckrank hits [limit]` using the existing ducks-hit order.
   Keep the current XP default and link, add private `!myrank` for both
   positions and a private bilingual `!duckhelp`; neither private query creates

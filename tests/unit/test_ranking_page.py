@@ -40,6 +40,15 @@ class RankingPageTests(unittest.TestCase):
         self.assertIn(".ranking-table-shell{margin-top:12px", rendered)
         self.assertNotIn("<script", rendered.casefold())
 
+    def test_static_header_does_not_claim_a_live_irc_connection(self) -> None:
+        for language, label in (("fr", "Classement DuckHunt"),
+                                ("en", "DuckHunt rankings")):
+            with self.subTest(language=language):
+                rendered = render_ranking_page(GameState(), language=language).decode("utf-8")
+                self.assertIn(f'<div class="header-status"><span>{label}</span></div>', rendered)
+                self.assertNotIn("Coin en ligne", rendered)
+                self.assertNotIn("Coin online", rendered)
+
     def test_default_xp_order_and_optional_ducks_order_are_both_stable(self) -> None:
         hunters = tuple(
             sorted(

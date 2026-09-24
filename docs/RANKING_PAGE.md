@@ -31,7 +31,7 @@ statistics_excluded_nicknames = ["Te[u]K"]
 ```
 
 The same RFC1459-aware list applies to `!duckstats`, `!duckrank`, partyline
-`.summary`, this HTML page and aggregate Prometheus player totals.
+`.summary`, `.top`, this HTML page and aggregate Prometheus player totals.
 
 When omitted or empty, no page is generated. The path must be absolute, end in
 `.html` and point into an existing real directory. Startup publishes the
@@ -39,6 +39,9 @@ recovered state. Every later page follows a successfully appended replay event,
 so a visible row never runs ahead of the durable journal. Page failures are
 counted and logged as bounded `RANKING` lifecycle facts; they never latch game
 persistence or interrupt IRC.
+The page header names the DuckHunt ranking; a saved HTML file does not assert
+that Coin is currently connected to IRC. Its update timestamp still describes
+the rendered game state.
 
 ## Content contract
 

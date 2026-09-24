@@ -30,6 +30,7 @@ The public parser recognizes these calibrated forms:
 - `!bang` and `!pan`
 - `!reload`
 - `!shop [id [target]]`
+- `!shop info <id>`
 - `!inventory [nickname]`
 - `!duckstats [nickname]`
 - `!lastduck`
@@ -42,8 +43,11 @@ Profile, inventory, personal rank, help and catalog queries are returned private
 as IRC `NOTICE` messages. Ranking and game activity remain visible in the
 channel. The shop query is one bounded NOTICE containing the compact purchase
 syntax and, only when configured, the operator-controlled HTTPS catalog URL;
-the 31-item catalog is no longer repeated over IRC. The link-free default keeps
-an unpublished or retired page out of player responses.
+the 31-item catalog is no longer repeated over IRC. `!shop info <id>` returns
+one private NOTICE with the item name, nominal XP price, scope and applicable
+catalog limits; it never purchases the item or creates a hunter. Discounts and
+credits are settled only at purchase. The link-free default keeps an
+unpublished or retired page out of player responses.
 
 The final IRC framing greedily joins adjacent response fragments whenever the
 target-specific 512-byte budget permits it. Commands therefore use the fewest
@@ -104,9 +108,11 @@ existing ranking orders, including the total ranked players and their current
 XP and duck counts. Excluded or unknown nicknames receive the same unknown-hunter
 reply as `!duckstats`. `!duckhelp` privately lists player commands in the
 instance language. Neither command registers a new hunter or writes a query
-event. A shop identifier must be a positive ASCII integer; whether the item
+event. A purchase identifier must be a positive ASCII integer; whether the item
 exists or requires a target remains a game-engine decision so it can produce a
-precise player outcome.
+precise player outcome. The private `info` subcommand requires exactly one
+positive ASCII identifier of at most four digits and reports unknown items
+without dispatching a game event.
 
 Successful purchases whose useful value is settled at runtime expose that exact
 value immediately: the targeting scope announces its accuracy percentage and

@@ -8,7 +8,7 @@ from collections.abc import Iterable
 
 from pyduckhunt.game.bread import active_channel_breads
 from pyduckhunt.game.accuracy import fatigue_penalty_bps, overexcitation_penalty_bps, shot_accuracy, live_scope_bonus_points
-from pyduckhunt.game.catalog import SHOP_CATALOG, shop_item
+from pyduckhunt.game.catalog import GrantKind, SHOP_CATALOG, shop_item
 from pyduckhunt.game.commands import (
     Command,
     CommandKind,
@@ -28,6 +28,7 @@ from pyduckhunt.game.loot import (
 )
 from pyduckhunt.game.model import (
     ActiveEffect,
+    EffectScope,
     FATIGUE_SCALE,
     FlightKind,
     FlightState,
@@ -1004,6 +1005,37 @@ def render_shop(shop_url: str | None = None) -> tuple[str, ...]:
 
 
 @localized
+def render_shop_info(item_id: int) -> tuple[str, ...]:
+    """Preview existing catalog facts without settling a purchase or player."""
+
+    if type(item_id) is not int or item_id < 1:
+        raise ValueError('shop information requires a positive item identifier')
+    item = shop_item(item_id)
+    if item is None:
+        return (tr('Boutique : objet #{0} inconnu.', item_id),)
+    facts = [
+        tr('prix nominal : {0} xp', item.base_cost),
+        tr('sur le canal') if item.scope is EffectScope.CHANNEL else tr('pour un joueur'),
+    ]
+    if item.grant_kind is GrantKind.TARGET_EFFECT:
+        facts.append(tr('cible requise'))
+    if item.duration_ns is not None:
+        facts.append(tr("jusqu'à {0}", format_duration_ns(item.duration_ns)))
+    if item.uses is not None:
+        facts.append(tr('{0} utilisations', item.uses))
+    if item_id == 20:
+        facts.append(tr('appel prévu sous 10mn, reportable si un canard vole'))
+    elif item_id == 21:
+        facts.append(tr('une attraction ; le prochain envol consomme un morceau et dure 20s de plus'))
+    elif item_id == 23:
+        facts.append(tr('envol prévu dans 10mn, reportable si un canard vole'))
+    return (
+        tr('{0}[Boutique #{1}]{2} {3} | {4} | !shop {1} pour acheter',
+           _COLOR_ORANGE, item_id, _RESET, _item_label(item_id), ' | '.join(facts)),
+    )
+
+
+@localized
 def render_ranking(
     state: GameState,
     *,
@@ -1104,7 +1136,7 @@ def render_help() -> tuple[str, ...]:
     """Show a short private player command guide without reading game state."""
 
     return (
-        tr('{0}[Aide DuckHunt]{1} !bang / !pan : tirer | !reload : recharger | !shop : catalogue, !shop <id> [cible] : acheter', _COLOR_ORANGE, _RESET),
+        tr('{0}[Aide DuckHunt]{1} !bang / !pan : tirer | !reload : recharger | !shop : catalogue, !shop <id> [cible] : acheter | !shop info <id> : détails', _COLOR_ORANGE, _RESET),
         tr('!duckstats [nick] : profil | !inventory [nick] : équipement | !lastduck : dernier vol'),
         tr('!duckrank [limite] : XP | !duckrank hits [limite] : canards | !myrank : mon rang | !duckhelp : cette aide'),
     )
@@ -1192,6 +1224,8 @@ def render_query(
         )
     if command.kind is CommandKind.SHOP and not command.arguments:
         return render_shop(shop_url)
+    if command.kind is CommandKind.SHOP_INFO:
+        return render_shop_info(int(command.arguments[0]))
     if command.kind is CommandKind.LAST_FLIGHT:
         if last_flight_elapsed_ns is not None:
             return render_last_flight(last_flight_elapsed_ns)
