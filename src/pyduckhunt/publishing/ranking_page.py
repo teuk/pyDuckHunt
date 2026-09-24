@@ -282,6 +282,16 @@ def _table(
                 "hunter-cell",
             ),
             (
+                tr("Progression"),
+                _fact_group(
+                    (
+                        (tr('Niveau'), tr("niv."), str(player.level)),
+                        (tr('XP disponible'), "xp", _integer(available_experience(player))),
+                    )
+                ),
+                "progress-cell",
+            ),
+            (
                 tr("Chasse"),
                 _fact_group(
                     (
@@ -292,16 +302,6 @@ def _table(
                 "hunt-cell",
             ),
             (tr('Meilleur temps'), _time(player.best_time_ms), "time-cell"),
-            (
-                tr("Progression"),
-                _fact_group(
-                    (
-                        (tr('Niveau'), tr("niv."), str(player.level)),
-                        (tr('XP disponible'), "xp", _integer(available_experience(player))),
-                    )
-                ),
-                "progress-cell",
-            ),
             (tr('Arme'), _escape(tr(policy.weapon_label)), "weapon-cell"),
             (
                 tr('État'),
@@ -385,9 +385,9 @@ def _table(
     headings = (
         ("Place", None),
         (tr('Chasseur'), None),
+        ("XP", RankingCriterion.EXPERIENCE),
         (tr("Canards"), RankingCriterion.HITS),
         (tr('Meilleur temps'), None),
-        ("XP", RankingCriterion.EXPERIENCE),
         (tr('Arme'), None),
         (tr('État'), None),
         (tr("Charge"), None),
@@ -410,8 +410,8 @@ def _table(
         f'aria-label="{_escape_attribute(view_label)}">{controls}'
         f'<div class="ranking-table-shell" aria-label="{_escape_attribute(view_label)}">'
         f'<table><caption>{_escape(view_label)}</caption><colgroup><col class="col-place"><col '
-        'class="col-hunter"><col class="col-hunt"><col class="col-time"><col '
-        'class="col-progress"><col class="col-weapon"><col class="col-condition"><col '
+        'class="col-hunter"><col class="col-progress"><col class="col-hunt"><col '
+        'class="col-time"><col class="col-weapon"><col class="col-condition"><col '
         'class="col-ammunition"><col class="col-shots"><col class="col-incidents"><col '
         f'class="col-inventory"></colgroup><thead><tr>{header}</tr></thead><tbody>{"".join(rows)}'
         '</tbody></table></div></section>'

@@ -65,7 +65,7 @@ This is part of the generated page itself and does not change the privileged
 spool-to-web publication service.
 
 The desktop grid deliberately groups the original 24 facts into eleven columns:
-identity, hunting totals, best time, progression, weapon, condition, ammunition,
+identity, progression, hunting totals, best time, weapon, condition, ammunition,
 shot history, accident history and the final inventory cell. No statistic is
 removed. The table uses the available width without a forced 2200-pixel canvas;
 below 1180 pixels the same facts become two-column player cards, then one column

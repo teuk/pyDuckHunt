@@ -144,7 +144,8 @@ superseded by the Unreleased section are retained here as development history.
   failure protection without disabling a busy channel's path watcher.
 - `!duckrank`, partyline summaries, the podium and the default public ranking
   now follow available XP. The script-free HTML table can still be switched to
-  the historical ducks-hit order through accessible column links.
+  the historical ducks-hit order through accessible column links. Its visual
+  order now places XP and level before duck totals, matching the primary rank.
 - `!inventory` now reports the actual remaining lifetime of the suppressor, just
   like every other time-bounded active item, and avoids repeating the nominal
   duration or percentage of promotion coupons.

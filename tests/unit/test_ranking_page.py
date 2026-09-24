@@ -116,12 +116,25 @@ class RankingPageTests(unittest.TestCase):
         self.assertEqual(xp_view.count('<th scope="col"'), 11)
         self.assertEqual(row.count("<td "), 11)
         self.assertIn('<colgroup><col class="col-place">', rendered)
+        self.assertIn(
+            '<col class="col-hunter"><col class="col-progress"><col class="col-hunt">'
+            '<col class="col-time">',
+            rendered,
+        )
         self.assertIn('<col class="col-inventory"></colgroup>', rendered)
         self.assertIn(
             ".ranking-table-shell table{width:100%;min-width:0;table-layout:fixed}",
             rendered,
         )
         self.assertIn("@media(max-width:1180px)", rendered)
+        self.assertLess(
+            row.index('data-label="Progression"'),
+            row.index('data-label="Chasse"'),
+        )
+        self.assertLess(
+            row.index('data-label="Chasse"'),
+            row.index('data-label="Meilleur temps"'),
+        )
         self.assertLess(row.index('data-label="Accidents"'), row.index('data-label="Inventaire"'))
         for fact in (
             "Canards : 39",
