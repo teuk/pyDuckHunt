@@ -52,6 +52,18 @@ class RuntimeSchedulerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_daily_schedule(0, tuple(range(20)), (0,) * 20)
 
+    def test_builder_places_injected_seconds_without_changing_legacy_callers(self) -> None:
+        seconds = tuple(range(18))
+        deadlines = build_daily_schedule(0, HOURS, MINUTES, seconds)
+        self.assertEqual(deadlines[0], 60_000_000_000)
+        self.assertEqual(deadlines[1], 3_601_000_000_000)
+        self.assertEqual(tuple(deadline % 60_000_000_000 for deadline in deadlines),
+                         tuple(second * 1_000_000_000 for second in seconds))
+        self.assertEqual(schedule(), build_daily_schedule(0, HOURS, MINUTES, (0,) * 18))
+        for invalid in ((0,), (True,) * 18, (60,) * 18, (-1,) * 18):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                build_daily_schedule(0, HOURS, MINUTES, invalid)
+
     def test_exact_due_tick_dispatches_the_injected_golden_flight(self) -> None:
         deadlines = schedule()
         installed = install_daily_schedule(GameState(), 0, 0, deadlines)

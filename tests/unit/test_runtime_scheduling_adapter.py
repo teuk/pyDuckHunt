@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pyduckhunt.game.commands import Command, CommandKind
 from pyduckhunt.game.model import FlightKind, GameState, ShotAttempt
-from pyduckhunt.game.runtime import BOOTSTRAP_DAILY_FLIGHT_COUNT
+from pyduckhunt.game.runtime import BOOTSTRAP_DAILY_FLIGHT_COUNT, build_daily_schedule
 from pyduckhunt.persistence import JournalFile, ReplayEvent, SnapshotStore
 from pyduckhunt.rendering import FlightAppearance
 from pyduckhunt.runtime import (
@@ -96,14 +96,15 @@ class RuntimeSchedulingAdapterTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             backwards.now_ns()
 
-    def test_schedule_source_draws_unique_hours_minutes_and_golden_health(self) -> None:
+    def test_schedule_source_draws_unique_hours_minutes_seconds_and_golden_health(self) -> None:
         integers = SequenceIntegerSource()
         source = CalibratedScheduleSource(integers)
         deadlines = source.daily_schedule(0)
         self.assertEqual(len(deadlines), 24)
         self.assertEqual(len(set(deadlines)), 24)
         self.assertEqual(deadlines[0], 60_000_000_000)
-        self.assertEqual(len(integers.calls), 48)
+        self.assertEqual(len(integers.calls), 72)
+        self.assertEqual(integers.calls[-24:], [(0, 59)] * 24)
         selection = source.flight_selection()
         self.assertEqual((selection.kind, selection.health), (FlightKind.GOLDEN, 3))
         self.assertEqual(integers.calls[-2:], [(1, 18), (3, 5)])
@@ -113,7 +114,44 @@ class RuntimeSchedulingAdapterTests(unittest.TestCase):
             BOOTSTRAP_DAILY_FLIGHT_COUNT,
         )
         self.assertEqual(len(bootstrap), BOOTSTRAP_DAILY_FLIGHT_COUNT)
-        self.assertEqual(len(bootstrap_integers.calls), 48)
+        self.assertEqual(len(bootstrap_integers.calls), 72)
+
+    def test_new_daily_plan_uses_random_seconds_and_remains_exact_after_restart(self) -> None:
+        draws = SequenceIntegerSource(*(0 for _ in range(48)), *(37 for _ in range(24)))
+        adapter, integers = self.adapter(draws)
+        installed = adapter.step(0)
+        schedule = self.runtime.state.daily_schedule
+        assert schedule is not None
+        first = schedule.deadlines_ns[0]
+        self.assertEqual(first, 97_000_000_000)
+        self.assertEqual({value % 60_000_000_000 for value in schedule.deadlines_ns},
+                         {37_000_000_000})
+        self.assertEqual(installed.next_deadline_ns, first)
+        self.assertEqual(len(integers.calls), 72)
+        adapter.step(first + 500_000_000)
+        flight = self.runtime.state.flight
+        assert flight is not None
+        self.assertEqual(flight.spawned_at_ns, first)
+        self.assertEqual(flight.expires_at_ns, first + 300_000_000_000)
+
+        self.runtime.close(2)
+        reopened, recovered = RuntimeOrchestrator.open(
+            JournalFile(self.root / 'events.jsonl'),
+            SnapshotStore(self.root / 'snapshot.json'),
+            self.output.append,
+            snapshot_interval=None,
+        )
+        self.addCleanup(reopened.close, 2)
+        self.assertEqual(recovered.state.daily_schedule.deadlines_ns,
+                         schedule.deadlines_ns)
+        self.assertEqual(recovered.state.daily_schedule.next_index, 1)
+        no_draws = SequenceIntegerSource()
+        after_restart = RuntimeSchedulingAdapter(
+            reopened, ('#pond',), CalibratedScheduleSource(no_draws),
+        )
+        after_restart.step(first + 1_000_000_000)
+        self.assertEqual(no_draws.calls, [])
+        self.assertEqual(reopened.state.daily_schedule.deadlines_ns, schedule.deadlines_ns)
 
     def test_legacy_plan_is_expanded_to_twenty_four_future_deadlines(self) -> None:
         legacy = CalibratedScheduleSource(SequenceIntegerSource()).daily_schedule(
@@ -124,7 +162,9 @@ class RuntimeSchedulingAdapterTests(unittest.TestCase):
             ReplayEvent.install_daily_schedule(0, 0, legacy),
             lambda transition: (),
         )
-        adapter, integers = self.adapter()
+        adapter, integers = self.adapter(SequenceIntegerSource(
+            *(value for _ in range(6) for value in (0, 37))
+        ))
         now_ns = 9 * 3_600_000_000_000 + 42 * 60_000_000_000
         result = adapter.step(now_ns)
         schedule = self.runtime.state.daily_schedule
@@ -135,7 +175,25 @@ class RuntimeSchedulingAdapterTests(unittest.TestCase):
         additions = set(schedule.deadlines_ns) - set(legacy)
         self.assertEqual(len(additions), 6)
         self.assertTrue(all(deadline > now_ns for deadline in additions))
-        self.assertEqual(len(integers.calls), 6)
+        self.assertEqual(len(integers.calls), 12)
+        self.assertEqual({deadline % 60_000_000_000 for deadline in additions},
+                         {37_000_000_000})
+
+    def test_already_persisted_twenty_four_slot_plan_keeps_its_exact_seconds(self) -> None:
+        existing = build_daily_schedule(0, tuple(range(24)), (13,) * 24)
+        self.runtime.dispatch(
+            ReplayEvent.install_daily_schedule(0, 0, existing),
+            lambda transition: (),
+        )
+        adapter, integers = self.adapter(SequenceIntegerSource(*(37 for _ in range(72))))
+        result = adapter.step(12_000_000_000)
+        schedule = self.runtime.state.daily_schedule
+        assert schedule is not None
+        self.assertFalse(result.plan_installed)
+        self.assertFalse(result.plan_expanded)
+        self.assertEqual(result.next_deadline_ns, existing[0])
+        self.assertEqual(schedule.deadlines_ns, existing)
+        self.assertEqual(integers.calls, [])
 
     def test_live_seven_of_eighteen_cursor_survives_immediate_expansion(self) -> None:
         legacy = CalibratedScheduleSource(SequenceIntegerSource()).daily_schedule(
@@ -318,7 +376,7 @@ class RuntimeSchedulingAdapterTests(unittest.TestCase):
         assert schedule is not None
         self.assertEqual(schedule.next_index, 1)
         self.assertIsNone(self.runtime.state.flight)
-        self.assertEqual(len(integers.calls), 48)
+        self.assertEqual(len(integers.calls), 72)
 
     def test_active_flight_skips_due_slot_without_consuming_entropy(self) -> None:
         adapter, integers = self.adapter()

@@ -9,13 +9,15 @@ sleep, create timers or write persistence.
 - Every new UTC-day schedule has a base of 24 unique deadlines, regardless
   of community activity.
 - On upgrade, a durable 18- or 21-deadline plan for the current day is extended
-  to 24 using only randomized future minutes. Existing deadlines and the
+  to 24 using randomized future minutes and seconds. Existing deadlines and the
   consumed cursor are preserved, and the complete extension is journaled
   before it can affect runtime behavior.
 - Every deadline lies inside the represented day.
-- The builder consumes one distinct injected hour and one injected minute per
-  slot. A selected midnight deadline moves to 00:01 so it cannot collide with
-  the daily planning callback.
+- Each new daily plan consumes one distinct injected hour, one injected minute
+  and one injected second (0–59) per slot. A selected midnight hour and minute
+  move to 00:01 while retaining the drawn second, avoiding the daily planning
+  callback. An already persisted 24-slot plan retains its exact timestamps
+  after restart or upgrade; its remaining `:00` flights are not rescheduled.
 - A kind roll from 1 through 18 selects a golden target on 1 and a standard
   target otherwise.
 - Golden health is a separate injected integer from 3 through 5.

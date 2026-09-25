@@ -115,8 +115,9 @@ def build_daily_schedule(
     day_start_ns: int,
     hours: tuple[int, ...],
     minutes: tuple[int, ...],
+    seconds: tuple[int, ...] | None = None,
 ) -> tuple[int, ...]:
-    """Turn injected hour and minute choices into one canonical daily plan."""
+    """Build exact daily deadlines; omitted seconds keep legacy callers stable."""
 
     if type(hours) is not tuple or len(hours) not in SUPPORTED_DAILY_FLIGHT_COUNTS:
         raise ValueError("schedule hour count is outside the supported policy")
@@ -128,12 +129,19 @@ def build_daily_schedule(
         raise ValueError("standard schedule hours must be distinct")
     if any(type(value) is not int or not 0 <= value <= 59 for value in minutes):
         raise ValueError("schedule minutes must be integers from zero through fifty-nine")
+    if seconds is None:
+        seconds = (0,) * len(hours)
+    if type(seconds) is not tuple or len(seconds) != len(hours):
+        raise ValueError("schedule requires one injected second per hour")
+    if any(type(value) is not int or not 0 <= value <= 59 for value in seconds):
+        raise ValueError("schedule seconds must be integers from zero through fifty-nine")
     deadlines = tuple(
         sorted(
             day_start_ns
             + hour * 3_600 * SECOND_NS
             + (1 if hour == 0 and minute == 0 else minute) * 60 * SECOND_NS
-            for hour, minute in zip(hours, minutes, strict=True)
+            + second * SECOND_NS
+            for hour, minute, second in zip(hours, minutes, seconds, strict=True)
         )
     )
     validate_daily_schedule(day_start_ns, deadlines)

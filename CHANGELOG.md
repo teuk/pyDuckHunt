@@ -5,6 +5,9 @@ these changes do not create a stable release or a tag.
 
 ## 0.2.0-dev — Unreleased
 
+- Randomize the second of each newly built daily flight to remove the predictable
+  `:00` takeoff, retaining 24 slots, the five-minute lifetime and every timestamp
+  in already persisted daily plans; legacy expansions randomize only new slots.
 - Make `!lastduck` measure "seen ago" from the actual duck appearance rather
   than the end of a completed flight; retain separate escape duration and
   the active-duck response.

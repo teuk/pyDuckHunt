@@ -126,10 +126,12 @@ class CalibratedScheduleSource:
             index = self._draw(0, len(available_hours) - 1)
             selected_hours.append(available_hours.pop(index))
         minutes = tuple(self._draw(0, 59) for _ in range(flight_count))
+        seconds = tuple(self._draw(0, 59) for _ in range(flight_count))
         return build_daily_schedule(
             day_start_ns,
             tuple(selected_hours),
             minutes,
+            seconds,
         )
 
     def bread_schedule(self, state: GameState, now_ns: int) -> tuple[int, ...]:
@@ -172,7 +174,7 @@ class CalibratedScheduleSource:
         now_ns: int,
         flight_count: int = FIXED_DAILY_FLIGHT_COUNT,
     ) -> tuple[int, ...]:
-        """Add randomized future minutes while preserving today's durable plan."""
+        """Add future minute and second draws without moving durable slots."""
 
         self._ensure_owner()
         if not isinstance(schedule, DailySchedule):
@@ -187,17 +189,18 @@ class CalibratedScheduleSource:
         minute_ns = 60 * 1_000_000_000
         first = ((now_ns // minute_ns) + 1) * minute_ns
         end = schedule.day_start_ns + DAY_NS
-        existing = set(schedule.deadlines_ns)
+        existing_minutes = {deadline // minute_ns for deadline in schedule.deadlines_ns}
         available = [
             deadline
             for deadline in range(first, end, minute_ns)
-            if deadline not in existing
+            if deadline // minute_ns not in existing_minutes
         ]
         if len(available) < missing:
             return schedule.deadlines_ns
         additions: list[int] = []
         for _ in range(missing):
-            additions.append(available.pop(self._draw(0, len(available) - 1)))
+            minute = available.pop(self._draw(0, len(available) - 1))
+            additions.append(minute + self._draw(0, 59) * 1_000_000_000)
         return tuple(sorted((*schedule.deadlines_ns, *additions)))
 
     def _draw(self, minimum: int, maximum: int) -> int:
