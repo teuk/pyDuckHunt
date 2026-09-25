@@ -8,6 +8,8 @@ Players can inspect an item with `!shop info <id>`: one private NOTICE shows
 the catalog price, scope and relevant limits without buying it. The displayed
 price is nominal; credits and promotions are calculated at the actual purchase
 with the existing `!shop <id> [target]` command.
+The plain `!shop` NOTICE also advertises the preview syntax, with or without
+a configured catalog URL; it stays on one bounded private IRC line.
 
 ## Supported catalog slice
 

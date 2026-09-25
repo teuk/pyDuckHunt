@@ -49,6 +49,20 @@ class RankingPageTests(unittest.TestCase):
                 self.assertNotIn("Coin en ligne", rendered)
                 self.assertNotIn("Coin online", rendered)
 
+    def test_page_explains_both_irc_rank_orders_and_private_personal_rank(self) -> None:
+        for language, explanation in (
+            ("fr", "!duckrank hits classe par canards touchés"),
+            ("en", "!duckrank hits ranks ducks hit"),
+        ):
+            with self.subTest(language=language):
+                rendered = render_ranking_page(GameState(), language=language).decode("utf-8")
+                self.assertIn(explanation, rendered)
+                self.assertIn("!myrank", rendered)
+                self.assertNotIn("classement IRC suivent toujours", rendered)
+                self.assertNotIn("IRC ranking always follow", rendered)
+                self.assertIn(".ranking-note{color:#a8b3b1;font-size:11px", rendered)
+                self.assertIn(".table-heading time{color:#879492;font-size:11px}", rendered)
+
     def test_default_xp_order_and_optional_ducks_order_are_both_stable(self) -> None:
         hunters = tuple(
             sorted(

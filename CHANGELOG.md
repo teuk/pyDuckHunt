@@ -5,6 +5,14 @@ these changes do not create a stable release or a tag.
 
 ## 0.2.0-dev — Unreleased
 
+- Make `!lastduck` measure "seen ago" from the actual duck appearance rather
+  than the end of a completed flight; retain separate escape duration and
+  the active-duck response.
+- Clarify private IRC rank help (five by default, twenty maximum), list Owner channel commands in partyline help, and align the #i/o site guide with 24 slots, one-flight bread and the personal detector.
+- Advertise the private item preview directly in the one-line `!shop` NOTICE,
+  while preserving purchase syntax and the optional shop link. Explain the
+  opt-in hits ranking and private `!myrank` accurately on the i/o ranking page;
+  make its summary labels, timestamp and note easier to read.
 - Add private, read-only `!shop info <id>` with catalog name, nominal XP price,
   scope and limits; keep existing purchase settlement unchanged.
 - Add partyline `.top [xp|hits]` and compact `.duckplanning next`, plus Owner

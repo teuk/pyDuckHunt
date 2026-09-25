@@ -2402,6 +2402,8 @@ _HELP_LINES = (
     tr('.game                           vol, planning et état DuckHunt'),
     tr('.duckplanning                   les 24 horaires, attractions et appeaux'),
     tr('.duckplanning next              le prochain événement et les compteurs'),
+    tr('!bread                          Owner IRC : pain valable 1h, consommé au prochain envol'),
+    tr('!duckcall                       Owner IRC : appel programmé, attend si vol actif'),
     tr('.summary                        top 5, profils, inventaires et dernier tireur'),
     tr('.top [xp|hits]                  top 5 sans profils ni inventaires'),
     tr('.duck [#canal]                 lance un canard sans déplacer le planning'),

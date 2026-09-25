@@ -43,6 +43,8 @@ EN = {
     '.duck [#canal]                 lance un canard sans déplacer le planning': '.duck [#channel]                launch a duck without moving the schedule',
     '.duckplanning                   les 24 horaires, attractions et appeaux': '.duckplanning                   all 24 times, attractions and calls',
     '.duckplanning next              le prochain événement et les compteurs': '.duckplanning next              next event and counts',
+    '!bread                          Owner IRC : pain valable 1h, consommé au prochain envol': '!bread                          Owner IRC: bread lasts 1h, consumed at next takeoff',
+    '!duckcall                       Owner IRC : appel programmé, attend si vol actif': '!duckcall                       Owner IRC: scheduled call, waits during active flight',
     '.top [xp|hits]                  top 5 sans profils ni inventaires': '.top [xp|hits]                  top 5 without profiles or inventories',
     '.fields                         champs acceptés par .setplayer': '.fields                         fields accepted by .setplayer',
     '.game                           vol, planning et état DuckHunt': '.game                           flight, schedule and DuckHunt state',
@@ -127,9 +129,10 @@ EN = {
         '      <div class="table-heading"><div><span>TABLEAU COMPLET</span><h2>Tous les '
         'chasseurs</h2></div><time datetime="{5}">Mise à jour : {6}</time></div>\n'
         '      {7}\n'
-        '      <p class="ranking-note">Le podium et le classement IRC suivent toujours l’XP '
-        'disponible. Les en-têtes XP et Canards changent uniquement l’ordre du tableau HTML. La '
-        'précision affichée est celle de l’arme au niveau courant.</p>\n'
+        '      <p class="ranking-note">Le podium et !duckrank suivent par défaut l’XP '
+        'disponible ; !duckrank hits classe par canards touchés. Les en-têtes XP et Canards '
+        'changent uniquement l’ordre du tableau HTML. !myrank affiche tes deux rangs en privé. '
+        'La précision affichée est celle de l’arme au niveau courant.</p>\n'
         '    </section>\n'
         '  </main>\n'
         '  <footer class="site-footer"><div class="site-container '
@@ -199,8 +202,9 @@ EN = {
         '      <div class="table-heading"><div><span>FULL LEADERBOARD</span><h2>All '
         'hunters</h2></div><time datetime="{5}">Updated: {6}</time></div>\n'
         '      {7}\n'
-        '      <p class="ranking-note">The podium and IRC ranking always follow available XP. The '
-        'XP and Ducks headers only change the HTML table order. Accuracy is the weapon’s base '
+        '      <p class="ranking-note">The podium and !duckrank use available XP by default; '
+        '!duckrank hits ranks ducks hit. The XP and Ducks headers only change the HTML table '
+        'order. !myrank shows your two positions privately. Accuracy is the weapon’s base '
         'accuracy at the current level.</p>\n'
         '    </section>\n'
         '  </main>\n'
@@ -286,8 +290,8 @@ EN = {
         'Base=24 flights/day | active bread={0} | attraction: {1}-slot plan (no guaranteed '
         'flight during the hour).'
     ),
-    'Boutique: !shop [id [cible]]': 'Shop: !shop [id [target]]',
-    'Boutique: {0} | !shop [id [cible]]': 'Shop: {0} | !shop [id [target]]',
+    'Boutique: !shop [id [cible]] | détails: !shop info <id>': 'Shop: !shop [id [target]] | details: !shop info <id>',
+    'Boutique: {0} | !shop [id [cible]] | détails: !shop info <id>': 'Shop: {0} | !shop [id [target]] | details: !shop info <id>',
     'Boutique : objet #{0} inconnu.': 'Shop: unknown item #{0}.',
     'prix nominal : {0} xp': 'base price: {0} xp',
     'sur le canal': 'for the channel',
@@ -870,7 +874,7 @@ EN = {
     '{0}[Mon rang]{1} {2} | XP disponibles : {3}/{4} ({5} xp) | canards : {6}/{4} ({7}, dont {8} {9})': '{0}[My rank]{1} {2} | Available XP: {3}/{4} ({5} xp) | Ducks: {6}/{4} ({7}, including {8} {9})',
     '{0}[Aide DuckHunt]{1} !bang / !pan : tirer | !reload : recharger | !shop : catalogue, !shop <id> [cible] : acheter | !shop info <id> : détails': '{0}[DuckHunt help]{1} !bang / !pan: shoot | !reload: reload | !shop: catalog, !shop <id> [target]: buy | !shop info <id>: item details',
     '!duckstats [nick] : profil | !inventory [nick] : équipement | !lastduck : dernier vol': '!duckstats [nick]: profile | !inventory [nick]: gear | !lastduck: last flight',
-    '!duckrank [limite] : XP | !duckrank hits [limite] : canards | !myrank : mon rang | !duckhelp : cette aide': '!duckrank [limit]: XP | !duckrank hits [limit]: ducks | !myrank: my rank | !duckhelp: this help',
+    '!duckrank [limite] : XP et canards (5 par défaut, 20 max) | !duckrank hits [limite] : canards | !myrank : mon rang | !duckhelp : cette aide': '!duckrank [limit]: XP and ducks (5 by default, max 20) | !duckrank hits [limit]: ducks | !myrank: my rank | !duckhelp: this help',
     '{0}[Inventaire]{1} arme: {2}{3} | mun.: {4}/{5} | charg.: {6} | {7} {8} {9}{10} | lettres: {11}': '{0}[Inventory]{1} weapon: {2}{3} | ammo: {4}/{5} | clips: {6} | {7} {8} {9}{10} | letters: {11}',
     (
         '{0}[Profil]{1} {2} xp | niv. {3} ({4}) +{5} xp = niv. sup. | fatigue: {6}{7} | karma: '

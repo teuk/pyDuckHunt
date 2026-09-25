@@ -36,7 +36,7 @@ body{background:#0a1012;font-size:15px;line-height:1.6}
 .hero-signal i{bottom:17px;color:#91c6c0}
 .summary-grid{margin-top:8px;border-color:var(--line);border-radius:7px}
 .summary-grid article{min-height:76px;padding:15px 19px;background:#101719;border-color:var(--line)}
-.summary-grid span{color:#8b9896;font-size:8px;letter-spacing:.08em}
+.summary-grid span{color:#8b9896;font-size:10px;letter-spacing:.08em}
 .summary-grid strong{margin-top:8px;font-size:18px}
 .ranking-section{padding-block:52px 66px}
 .section-heading,.table-heading{gap:28px}
@@ -55,7 +55,7 @@ body{background:#0a1012;font-size:15px;line-height:1.6}
 .podium-meta span{padding:5px 7px;border-color:#344246;color:#a5b0ae;font-size:8px}
 .empty-state,.table-empty{margin-top:22px;padding:32px;border-color:#46575a;border-radius:7px;background:#101719}
 .table-heading{margin-top:50px;padding-bottom:15px}
-.table-heading time{color:#879492;font-size:8px}
+.table-heading time{color:#879492;font-size:11px}
 .ranking-table-shell{margin-top:12px;border-color:var(--line);border-radius:7px;background:#0d1416;box-shadow:none}
 th{padding:13px 11px;background:#141d1f;color:#9aa7a5;font-size:8px;letter-spacing:.07em}
 td{padding:12px 11px;border-bottom-color:#202c2f;color:#c7cfcd;font-size:11px}
@@ -65,7 +65,7 @@ tbody tr:hover{background:#151f21}
 .rank-1 .rank-badge{border-color:var(--amber);color:var(--amber-soft);box-shadow:none}
 .rank-2 .rank-badge,.rank-3 .rank-badge{border-color:#597874;color:#9bcac5}
 .hunter{font-size:12px}
-.ranking-note{color:#879492;font-size:9px;letter-spacing:.02em}
+.ranking-note{color:#a8b3b1;font-size:11px;line-height:1.6;letter-spacing:.02em}
 .site-footer{background:#080d0f;border-top-color:var(--line)}
 .footer-inner{min-height:66px;color:#7e8b89;font-size:8px}
 @media(max-width:980px){.hero-grid{grid-template-columns:1fr}.hero-signal{display:none}.podium-card{min-height:150px}}

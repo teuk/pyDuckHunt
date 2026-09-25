@@ -42,7 +42,8 @@ The public parser recognizes these calibrated forms:
 Profile, inventory, personal rank, help and catalog queries are returned privately to the requester
 as IRC `NOTICE` messages. Ranking and game activity remain visible in the
 channel. The shop query is one bounded NOTICE containing the compact purchase
-syntax and, only when configured, the operator-controlled HTTPS catalog URL;
+syntax, the private `!shop info <id>` preview and, only when configured, the
+operator-controlled HTTPS catalog URL;
 the 31-item catalog is no longer repeated over IRC. `!shop info <id>` returns
 one private NOTICE with the item name, nominal XP price, scope and applicable
 catalog limits; it never purchases the item or creates a hunter. Discounts and
@@ -87,11 +88,15 @@ guessing from damage, because curse composition can alter damage independently.
 Empty-magazine, unjam and exhausted-reserve responses include the settled
 round and magazine counts. Ordinary, super and mechanical escapes retain their
 distinct labels and trail, while a noise escape uses its own frightened trail.
-The active `!lastduck` response reports elapsed presence without publishing the
-remaining deadline.
+`!lastduck` measures "seen ago" from the flight's appearance, whether the
+duck is still present, was shot, or has escaped. After an escape, "fled after"
+gives the separate duration between appearance and departure. The active reply
+uses the actual flight state and does not reveal its remaining deadline; a
+flight can last longer than five minutes when its deadline is extended.
 
 `!duckrank` defaults to five hunters by available XP while retaining the explicit
-1–20 boundary. `!duckrank hits [limit]` opts into the existing ducks-hit order
+1–20 boundary. Private `!duckhelp` names the default and maximum so players
+can choose the same view deliberately. `!duckrank hits [limit]` opts into the existing ducks-hit order
 used by the ranking page; the XP form and its order do not change. The selected
 view appears in the heading. The first public line uses a compact colored podium with medals for
 the leading three places. Each entry shows available XP, ducks hit and the

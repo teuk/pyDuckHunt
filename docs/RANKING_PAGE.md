@@ -47,8 +47,12 @@ the rendered game state.
 
 The HTML exporter is deterministic, script-free and capped at 4 MiB. It escapes
 all nicknames and contains a restrictive content-security policy. IRC
-`!duckrank`, partyline `.summary`, the podium and the default HTML view always
-rank by available XP descending. Ties are broken by ducks hit descending, best
+`!duckrank` by default, partyline `.summary` and `.top` by default, the podium
+and the default HTML view rank by available XP descending. `!duckrank hits` and
+`.top hits` select the existing ducks-hit order. The page explains both IRC
+commands and the private `!myrank` view alongside its own sorting controls.
+The summary labels, update time and explanatory note use readable text sizes.
+Ties are broken by ducks hit descending, best
 time ascending and canonical IRC identity. The HTML table also offers an
 explicit ducks-hit view which preserves the previous order: hits descending,
 best time ascending, then canonical IRC identity. Both views are pre-rendered;

@@ -93,6 +93,8 @@ class ResponseRenderingTests(unittest.TestCase):
             lines = render_help(language=language)
             self.assertIn(purchase, lines[0])
             self.assertIn("!shop info <id>", lines[0])
+            self.assertIn("5 par défaut" if language == "fr" else "5 by default", lines[2])
+            self.assertIn("20 max" if language == "fr" else "max 20", lines[2])
             wires = render_wire_notice("Hunter", lines)
             self.assertTrue(all(len(wire) <= 512 for wire in wires))
             self.assertNotIn(b"\xe2\x80\xa6", b" ".join(wires))
@@ -784,11 +786,14 @@ class ResponseRenderingTests(unittest.TestCase):
         )
 
     def test_shop_is_one_flood_safe_optional_catalog_link(self) -> None:
-        self.assertEqual(render_shop(), ("Boutique: !shop [id [cible]]",))
+        self.assertEqual(render_shop(), ("Boutique: !shop [id [cible]] | détails: !shop info <id>",))
         lines = render_shop("https://games.example/duckhunt/shop/")
         self.assertEqual(len(lines), 1)
         self.assertIn("https://games.example/duckhunt/shop/", lines[0])
         self.assertIn("!shop [id [cible]]", lines[0])
+        self.assertIn("!shop info <id>", lines[0])
+        self.assertIn("!shop info <id>", render_shop(language="en")[0])
+        self.assertIn("details:", render_shop(language="en")[0])
         self.assertLessEqual(len(f"NOTICE {'X' * 30} :{lines[0]}\r\n".encode()), 512)
         longest = render_shop("https://games.example/" + "a" * 218)[0]
         self.assertLessEqual(len(f"NOTICE {'X' * 30} :{longest}\r\n".encode()), 512)
@@ -984,7 +989,73 @@ class ResponseRenderingTests(unittest.TestCase):
         line = render_last_flight(record, now_ns=361_000_000_000)[0]
         self.assertIn("Las d'attendre, il s'est enfui", line)
         self.assertIn("5mn00s", line)
-        self.assertIn("1mn00s", line)
+        self.assertIn("aperçu il y a 6mn00s", line)
+
+    def test_last_flight_distinguishes_appearance_from_escape_in_both_languages(self) -> None:
+        # Appeared at 08:11, escaped at 08:16, queried at 08:18:24.
+        appeared = 8 * 3_600_000_000_000 + 11 * 60_000_000_000
+        escaped = appeared + 300_000_000_000
+        now = escaped + 144_000_000_000
+        record = LastFlight(
+            4, FlightKind.STANDARD, appeared, escaped, LastFlightConclusion.ESCAPED,
+        )
+        for language, seen, departed in (
+            ('fr', 'aperçu il y a 7mn24s', "enfui après 5mn00s"),
+            ('en', 'seen 7m24s ago', 'fled after 5m00s'),
+        ):
+            with self.subTest(language=language):
+                line = render_last_flight(record, now_ns=now, language=language)[0]
+                self.assertIn(seen, line)
+                self.assertIn(departed, line)
+                self.assertNotIn('2mn24s', line)
+
+    def test_last_flight_uses_appearance_for_hit_and_frightened_escape(self) -> None:
+        for conclusion, actor in (
+            (LastFlightConclusion.HIT, 'Alice'),
+            (LastFlightConclusion.FRIGHTENED, None),
+        ):
+            record = LastFlight(
+                7, FlightKind.GOLDEN, 1_000_000_000, 31_000_000_000,
+                conclusion, actor,
+            )
+            for language, seen in (
+                ('fr', 'aperçu il y a 1mn00s'),
+                ('en', 'seen 1m00s ago'),
+            ):
+                with self.subTest(conclusion=conclusion, language=language):
+                    line = render_last_flight(
+                        record, now_ns=61_000_000_000, language=language,
+                    )[0]
+                    self.assertIn(seen, line)
+                    self.assertNotIn('30s ago', line)
+                    self.assertIn('Alice' if actor else '30s', line)
+
+    def test_last_flight_uses_active_state_even_after_five_minutes(self) -> None:
+        command = parse_command('!lastduck')
+        assert command is not None
+        active = FlightState(
+            flight_id=2, kind=FlightKind.STANDARD,
+            spawned_at_ns=1_000_000_000, expires_at_ns=601_000_000_000,
+            health=1,
+        )
+        previous = LastFlight(
+            1, FlightKind.STANDARD, 0, 1_000_000_000,
+            LastFlightConclusion.ESCAPED,
+        )
+        for elapsed_ns, expected in (
+            (144_000_000_000, '2mn24s'),
+            (360_000_000_000, '6mn00s'),
+        ):
+            with self.subTest(elapsed_ns=elapsed_ns):
+                state = GameState(
+                    now_ns=active.spawned_at_ns + elapsed_ns,
+                    next_flight_id=3,
+                    flight=active, last_flight=previous,
+                )
+                line = render_query(state, 'Alice', command)[0]
+                self.assertIn(f'aperçu il y a {expected}', line)
+                self.assertIn('Il est toujours là', line)
+                self.assertNotIn('enfui', line)
 
     def test_query_defaults_profile_target_to_actor(self) -> None:
         command = parse_command("!duckstats")

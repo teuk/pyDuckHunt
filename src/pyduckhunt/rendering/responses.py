@@ -1000,8 +1000,8 @@ def render_shop(shop_url: str | None = None) -> tuple[str, ...]:
 
     normalized = normalize_shop_url(shop_url)
     if normalized is None:
-        return (tr('Boutique: !shop [id [cible]]'),)
-    return (tr('Boutique: {0} | !shop [id [cible]]', normalized),)
+        return (tr('Boutique: !shop [id [cible]] | détails: !shop info <id>'),)
+    return (tr('Boutique: {0} | !shop [id [cible]] | détails: !shop info <id>', normalized),)
 
 
 @localized
@@ -1138,7 +1138,7 @@ def render_help() -> tuple[str, ...]:
     return (
         tr('{0}[Aide DuckHunt]{1} !bang / !pan : tirer | !reload : recharger | !shop : catalogue, !shop <id> [cible] : acheter | !shop info <id> : détails', _COLOR_ORANGE, _RESET),
         tr('!duckstats [nick] : profil | !inventory [nick] : équipement | !lastduck : dernier vol'),
-        tr('!duckrank [limite] : XP | !duckrank hits [limite] : canards | !myrank : mon rang | !duckhelp : cette aide'),
+        tr('!duckrank [limite] : XP et canards (5 par défaut, 20 max) | !duckrank hits [limite] : canards | !myrank : mon rang | !duckhelp : cette aide'),
     )
 
 
@@ -1164,7 +1164,7 @@ def render_last_flight(
         return (tr('Le dernier canard a été aperçu il y a {0}.', _duration(last_flight)),)
     if not isinstance(last_flight, LastFlight) or type(now_ns) is not int or now_ns < last_flight.ended_at_ns:
         raise ValueError("last-flight rendering requires durable facts and current game time")
-    ago = _duration(now_ns - last_flight.ended_at_ns)
+    ago = _duration(now_ns - last_flight.spawned_at_ns)
     duration = _duration(last_flight.ended_at_ns - last_flight.spawned_at_ns)
     kind = (
         tr(", il s'agissait d'un super-canard")

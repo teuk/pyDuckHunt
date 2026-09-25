@@ -222,6 +222,7 @@ carry the owner handle in an `admin_weapon_control` journal event, broadcast to
 the partyline and acknowledge the result in the IRC channel or by private
 NOTICE, matching the command scope.
 
+Partyline `.help` lists both Owner IRC commands with their channel effects.
 `!bread` adds one stack of the same one-hour channel bread as `!shop 21`.
 `!duckcall` schedules the same within-ten-minutes duck call as `!shop 20`.
 The old `!pain` and `!appeau` commands remain accepted as quiet aliases;
